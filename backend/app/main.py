@@ -14,12 +14,22 @@ from pathlib import Path
 import json
 
 from fastapi import FastAPI, HTTPException
+from fastapi.staticfiles import StaticFiles
 
 from .schemas import ContentPack
 
 app = FastAPI(title="Ghar API", version="0.1.0")
 
 DATA_DIR = Path(__file__).parent / "data"
+
+# Family-recorded audio lives here, organized to match the audio_url paths
+# in the JSON:  audio_url "/audio/nepal-v1/food_momo_np.m4a"
+#        <-->  file app/static/audio/nepal-v1/food_momo_np.m4a
+# Drop a new .m4a in the right folder and the app can play it immediately —
+# no code changes, no app update.
+AUDIO_DIR = Path(__file__).parent / "static" / "audio"
+AUDIO_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/audio", StaticFiles(directory=AUDIO_DIR), name="audio")
 
 
 def load_pack(pack_id: str) -> ContentPack:

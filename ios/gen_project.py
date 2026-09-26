@@ -33,6 +33,8 @@ P = {
     "proj_release":   "BCBCBCBCBCBCBCBCBCBCBCBC",
     "target_debug":   "DEDEDEDEDEDEDEDEDEDEDEDE",
     "target_release": "F0F0F0F0F0F0F0F0F0F0F0F0",
+    "ref_assets":     "1A1A1A1A1A1A1A1A1A1A1A1A",
+    "build_assets":   "2B2B2B2B2B2B2B2B2B2B2B2B",
 }
 
 SWIFT_FILES = [
@@ -46,6 +48,7 @@ build_files = "\n".join(
     f"\t\t{P[b]} /* {name} in Sources */ = {{isa = PBXBuildFile; fileRef = {P[r]} /* {name} */; }};"
     for r, b, name in SWIFT_FILES
 )
+build_files += f"\n\t\t{P['build_assets']} /* Assets.xcassets in Resources */ = {{isa = PBXBuildFile; fileRef = {P['ref_assets']} /* Assets.xcassets */; }};"
 file_refs = "\n".join(
     f"\t\t{P[r]} /* {name} */ = {{isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = {name}; sourceTree = \"<group>\"; }};"
     for r, b, name in SWIFT_FILES
@@ -65,6 +68,7 @@ pbxproj = f"""// !$*UTF8*$!
 
 /* Begin PBXFileReference section */
 \t\t{P["app_ref"]} /* Ghar.app */ = {{isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Ghar.app; sourceTree = BUILT_PRODUCTS_DIR; }};
+\t\t{P["ref_assets"]} /* Assets.xcassets */ = {{isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; }};
 {file_refs}
 /* End PBXFileReference section */
 
@@ -94,6 +98,7 @@ pbxproj = f"""// !$*UTF8*$!
 \t\t\t\t{P["ref_contentview"]} /* ContentView.swift */,
 \t\t\t\t{P["ref_models"]} /* Models.swift */,
 \t\t\t\t{P["ref_gharapi"]} /* GharAPI.swift */,
+\t\t\t\t{P["ref_assets"]} /* Assets.xcassets */,
 \t\t\t);
 \t\t\tsourceTree = "<group>";
 \t\t}};
@@ -153,6 +158,7 @@ pbxproj = f"""// !$*UTF8*$!
 \t\t\tisa = PBXResourcesBuildPhase;
 \t\t\tbuildActionMask = 2147483647;
 \t\t\tfiles = (
+\t\t\t\t{P["build_assets"]} /* Assets.xcassets in Resources */,
 \t\t\t);
 \t\t\trunOnlyForDeploymentPostprocessing = 0;
 \t\t}};
@@ -230,6 +236,7 @@ pbxproj = f"""// !$*UTF8*$!
 \t\t\tbuildSettings = {{
 \t\t\t\tALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
 \t\t\t\tASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+\t\t\t\tASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 \t\t\t\tCLANG_ENABLE_MODULES = YES;
 \t\t\t\tCODE_SIGN_STYLE = Automatic;
 \t\t\t\tCURRENT_PROJECT_VERSION = 1;
@@ -260,6 +267,7 @@ pbxproj = f"""// !$*UTF8*$!
 \t\t\tbuildSettings = {{
 \t\t\t\tALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
 \t\t\t\tASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+\t\t\t\tASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 \t\t\t\tCLANG_ENABLE_MODULES = YES;
 \t\t\t\tCODE_SIGN_STYLE = Automatic;
 \t\t\t\tCURRENT_PROJECT_VERSION = 1;

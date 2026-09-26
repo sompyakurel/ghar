@@ -13,7 +13,10 @@ import Foundation
 class GharAPI {
     static let shared = GharAPI()
 
-    private let baseURL = URL(string: "http://localhost:8000")!
+    /// One place for the server address, so every call (JSON + audio) uses it.
+    static let baseURLString = "http://localhost:8000"
+
+    private var baseURL: URL { URL(string: Self.baseURLString)! }
 
     func fetchPack(packId: String = "nepal-v1") async throws -> ContentPack {
         let url = baseURL.appendingPathComponent("packs/\(packId)")

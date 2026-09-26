@@ -1,4 +1,5 @@
 import SwiftUI
+import AVFoundation
 
 /// First screen: list of lesson decks, loaded live from our Python backend.
 ///
@@ -55,26 +56,52 @@ struct ContentView: View {
     }
 }
 
-/// Tapping a deck shows its words: Devanagari + romanized + English.
+/// Tapping a deck shows its words: Devanagari + romanized + English,
+/// each with a speaker button that streams the recorded audio.
+///
+/// Teaching notes:
+/// - `AVPlayer` is Apple's audio/video player. `AVPlayer(url:)` streams
+///   straight from our backend — the file never has to live inside the app.
+/// - `@State private var player` keeps the player alive while the sound
+///   plays. Without this, SwiftUI would throw it away mid-word and you'd
+///   hear nothing (a classic beginner bug — now you know it).
 struct DeckView: View {
     let deck: Deck
+    @State private var player: AVPlayer?
 
     var body: some View {
         List(deck.words) { word in
-            VStack(alignment: .leading, spacing: 4) {
-                Text(word.devanagari)
-                    .font(.largeTitle)
-                Text("\(word.romanized) — \(word.english)")
-                    .foregroundStyle(.secondary)
-                if let example = word.exampleSentenceNp {
-                    Text("“\(example)”")
-                        .font(.caption)
-                        .italic()
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(word.devanagari)
+                        .font(.largeTitle)
+                    Text("\(word.romanized) — \(word.english)")
+                        .foregroundStyle(.secondary)
+                    if let example = word.exampleSentenceNp {
+                        Text("“\(example)”")
+                            .font(.caption)
+                            .italic()
+                    }
                 }
+                Spacer()
+                Button(action: { play(word: word) }) {
+                    Image(systemName: "speaker.wave.2.fill")
+                        .font(.title2)
+                }
+                .buttonStyle(.bordered)
             }
             .padding(.vertical, 4)
         }
         .navigationTitle(deck.title)
+    }
+
+    /// Builds the full audio URL and plays it:
+    ///   server address + path from the JSON
+    ///   http://localhost:8000 + /audio/nepal-v1/food_momo_np.m4a
+    private func play(word: Word) {
+        guard let url = URL(string: GharAPI.baseURLString + word.audioUrl) else { return }
+        player = AVPlayer(url: url)
+        player?.play()
     }
 }
 
