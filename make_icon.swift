@@ -4,14 +4,16 @@
 // Run from ~/Desktop/Ghar:
 //     swift make_icon.swift
 //
-// What it draws: a cream Devanagari "घ" on deep crimson, ringed by a
+// What it draws: a cream home icon on deep crimson, ringed by a
 // deep-blue rounded border (Nepal flag colors). iOS rounds the corners
 // itself, so we fill the whole square.
 //
 // Teaching notes:
 // - NSBitmapImageRep = a blank canvas of pixels we paint into.
-// - NSBezierPath = vector shapes (rects, rounded rects).
-// - We try macOS's built-in Devanagari fonts until one exists.
+// - NSBezierPath = vector shapes. The house is one path: move(to:) +
+//   line(to:) trace the roof triangle and walls like connect-the-dots,
+//   then fill() paints it. The door and window are crimson shapes on
+//   top, so they look cut out.
 // - Want different colors? Change the three NSColor lines and re-run.
 import AppKit
 import Foundation
@@ -47,21 +49,33 @@ flagBlue.setStroke()
 border.lineWidth = 46
 border.stroke()
 
-// 3. Cream "घ", centered
-let candidates = ["KohinoorDevanagari-Bold", "KohinoorDevanagari-Semibold",
-                  "DevanagariMT", "DevanagariSangamMN"]
-let fontName = candidates.first { NSFont(name: $0, size: 40) != nil }
-    ?? NSFont.systemFont(ofSize: 40).fontName
-let font = NSFont(name: fontName, size: 620)!
-let style = NSMutableParagraphStyle()
-style.alignment = .center
-let attrs: [NSAttributedString.Key: Any] = [
-    .font: font, .foregroundColor: cream, .paragraphStyle: style
-]
-let glyph = NSAttributedString(string: "घ", attributes: attrs)
-let gSize = glyph.size()
-glyph.draw(at: NSPoint(x: (size - gSize.width) / 2,
-                      y: (size - gSize.height) / 2 - 30))
+// 3. Cream home icon, centered.
+// A house is one filled path: trace the roof triangle + walls like
+// connect-the-dots, then fill. The door and round window are crimson
+// shapes painted on top, so they look cut out.
+let house = NSBezierPath()
+house.move(to: NSPoint(x: 232, y: 620))   // left eave
+
+house.line(to: NSPoint(x: 512, y: 880))   // roof peak
+
+house.line(to: NSPoint(x: 792, y: 620))   // right eave
+
+house.line(to: NSPoint(x: 712, y: 620))   // step in to the right wall
+
+house.line(to: NSPoint(x: 712, y: 270))   // right wall down
+
+house.line(to: NSPoint(x: 312, y: 270))   // bottom wall
+
+house.line(to: NSPoint(x: 312, y: 620))   // left wall up
+
+house.close()                             // back to the left eave
+cream.setFill()
+house.fill()
+
+// Door + round window, cut out in crimson
+crimson.setFill()
+NSBezierPath(rect: NSRect(x: 462, y: 270, width: 100, height: 190)).fill()
+NSBezierPath(ovalIn: NSRect(x: 472, y: 690, width: 80, height: 80)).fill()
 
 NSGraphicsContext.restoreGraphicsState()
 
