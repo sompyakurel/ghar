@@ -1,1 +1,179 @@
-{"country":"Nepal","decks":[{"id":"alphabet","min_age_band":"seedling","theme":"alphabet","title":"First Letters","words":[{"audio_url":"/audio/nepal-v1/alpha_ka_np.m4a","devanagari":"क","english":"the first letter — like 'k' in kite","example_sentence_en":"'Ka' is for 'kagaj' (paper)","example_sentence_np":"Ka bata kagaj","id":"ka","romanized":"ka"},{"audio_url":"/audio/nepal-v1/alpha_kha_np.m4a","devanagari":"ख","english":"breathy 'kha' — like 'kha' in khana","example_sentence_en":"'Kha' is for 'khana' (food)","example_sentence_np":"Kha bata khana","id":"kha","romanized":"kha"},{"audio_url":"/audio/nepal-v1/alpha_ga_np.m4a","devanagari":"ग","english":"'g' as in go","example_sentence_en":"'Ga' is for 'ghar' (home)","example_sentence_np":"Ga bata ghar","id":"ga","romanized":"ga"}]},{"id":"food","min_age_band":"seedling","theme":"food","title":"Food","words":[{"audio_url":"/audio/nepal-v1/food_momo_np.m4a","devanagari":"मोमो","english":"dumpling","example_sentence_en":"It's delicious!","example_sentence_np":"Mitho chha!","id":"momo","image":"momo","romanized":"momo"},{"audio_url":"/audio/nepal-v1/food_dal_np.m4a","devanagari":"दाल","english":"lentil soup","example_sentence_en":"Let's eat dal bhat!","example_sentence_np":"Dal bhat khau!","id":"dal","image":"dal","romanized":"dal"},{"audio_url":"/audio/nepal-v1/food_bhat_np.m4a","devanagari":"भात","english":"cooked rice","example_sentence_en":"Is the rice ready?","example_sentence_np":"Bhat pakyo?","id":"bhat","image":"bhat","romanized":"bhat"},{"audio_url":"/audio/nepal-v1/food_khana_np.m4a","devanagari":"खाना","english":"food / meal","example_sentence_en":"Let's eat!","example_sentence_np":"Khana khau!","id":"khana","romanized":"khana"},{"audio_url":"/audio/nepal-v1/food_selroti_np.m4a","devanagari":"सेलरोटी","english":"sweet rice-flour ring bread (Tihar treat)","example_sentence_en":"Sel roti at Tihar!","example_sentence_np":"Tihar ma sel roti!","id":"selroti","image":"selroti","romanized":"sel roti"}]},{"id":"family","min_age_band":"seedling","theme":"family","title":"Family","words":[{"audio_url":"/audio/nepal-v1/fam_aama_np.m4a","devanagari":"आमा","english":"mom","example_sentence_en":"Hello, mom!","example_sentence_np":"Aama, namaste!","id":"aama","romanized":"aama"},{"audio_url":"/audio/nepal-v1/fam_baba_np.m4a","devanagari":"बाबा","english":"dad","example_sentence_en":"Dad, where are you?","example_sentence_np":"Baba, kaha ho?","id":"baba","romanized":"baba"},{"audio_url":"/audio/nepal-v1/fam_didi_np.m4a","devanagari":"दिदी","english":"older sister","example_sentence_en":"Sister, help me!","example_sentence_np":"Didi, sahayog gara!","id":"didi","romanized":"didi"},{"audio_url":"/audio/nepal-v1/fam_dai_np.m4a","devanagari":"दाइ","english":"older brother","example_sentence_en":"Brother, let's play!","example_sentence_np":"Dai, khelam!","id":"dai","romanized":"dai"}]}],"id":"nepal-v1","language":"Nepali","quests":[{"description":"Five days of lights, crows, dogs, and brothers and sisters. Learn what each day means.","id":"tihar","min_age_band":"seedling","mission":"Say 'Shuva Tihar' to someone you love and record it for the Family Circle.","scenes":[{"audio_url":"/audio/nepal-v1/quest_tihar_1_np.m4a","id":"tihar-1","text_en":"Tihar is here! The house is bright, hearts are happy.","text_np_romanized":"Tihar aayo! Ghar ujyalo, mann khusi."},{"audio_url":"/audio/nepal-v1/quest_tihar_2_np.m4a","choice_prompt":"Who do we honor on the first day?","choices":["The crow","The dog","The cow"],"id":"tihar-2","text_en":"Day one: crow day. We offer rice to the crow.","text_np_romanized":"Pahilo din: kag tihar. Kag lai bhat dinchhau."},{"audio_url":"/audio/nepal-v1/quest_tihar_3_np.m4a","id":"tihar-3","text_en":"On Bhai Tika, sisters put the seven-colored tika on their brothers.","text_np_romanized":"Bhai tika ma didi-bahini le dai-bhai lai saptarangi tika lagaidinchan."}],"title":"Tihar Is Coming"}],"version":"1.0.0"}
+{
+  "country": "Nepal",
+  "decks": [
+    {
+      "id": "alphabet",
+      "min_age_band": "seedling",
+      "theme": "alphabet",
+      "title": "First Letters",
+      "words": [
+        {
+          "audio_url": "/audio/nepal-v1/alpha_ka_np.m4a",
+          "devanagari": "क",
+          "english": "the first letter — like 'k' in kite",
+          "example_sentence_en": "'Ka' is for 'kagaj' (paper)",
+          "example_sentence_np": "Ka bata kagaj",
+          "id": "ka",
+          "romanized": "ka"
+        },
+        {
+          "audio_url": "/audio/nepal-v1/alpha_kha_np.m4a",
+          "devanagari": "ख",
+          "english": "breathy 'kha' — like 'kha' in khana",
+          "example_sentence_en": "'Kha' is for 'khana' (food)",
+          "example_sentence_np": "Kha bata khana",
+          "id": "kha",
+          "romanized": "kha"
+        },
+        {
+          "audio_url": "/audio/nepal-v1/alpha_ga_np.m4a",
+          "devanagari": "ग",
+          "english": "'g' as in go",
+          "example_sentence_en": "'Ga' is for 'ghar' (home)",
+          "example_sentence_np": "Ga bata ghar",
+          "id": "ga",
+          "romanized": "ga"
+        }
+      ]
+    },
+    {
+      "id": "food",
+      "min_age_band": "seedling",
+      "theme": "food",
+      "title": "Food",
+      "words": [
+        {
+          "audio_url": "/audio/nepal-v1/food_momo_np.m4a",
+          "devanagari": "मोमो",
+          "english": "dumpling",
+          "example_sentence_en": "It's delicious!",
+          "example_sentence_np": "Mitho chha!",
+          "id": "momo",
+          "image": "momo",
+          "romanized": "momo"
+        },
+        {
+          "audio_url": "/audio/nepal-v1/food_dal_np.m4a",
+          "devanagari": "दाल",
+          "english": "lentil soup",
+          "example_sentence_en": "Let's eat dal bhat!",
+          "example_sentence_np": "Dal bhat khau!",
+          "id": "dal",
+          "image": "dal",
+          "romanized": "dal"
+        },
+        {
+          "audio_url": "/audio/nepal-v1/food_bhat_np.m4a",
+          "devanagari": "भात",
+          "english": "cooked rice",
+          "example_sentence_en": "Is the rice ready?",
+          "example_sentence_np": "Bhat pakyo?",
+          "id": "bhat",
+          "image": "bhat",
+          "romanized": "bhat"
+        },
+        {
+          "audio_url": "/audio/nepal-v1/food_khana_np.m4a",
+          "devanagari": "खाना",
+          "english": "food / meal",
+          "example_sentence_en": "Let's eat!",
+          "example_sentence_np": "Khana khau!",
+          "id": "khana",
+          "romanized": "khana"
+        },
+        {
+          "audio_url": "/audio/nepal-v1/food_selroti_np.m4a",
+          "devanagari": "सेलरोटी",
+          "english": "sweet rice-flour ring bread (Tihar treat)",
+          "example_sentence_en": "Sel roti at Tihar!",
+          "example_sentence_np": "Tihar ma sel roti!",
+          "id": "selroti",
+          "image": "selroti",
+          "romanized": "sel roti"
+        }
+      ]
+    },
+    {
+      "id": "family",
+      "min_age_band": "seedling",
+      "theme": "family",
+      "title": "Family",
+      "words": [
+        {
+          "audio_url": "/audio/nepal-v1/fam_aama_np.m4a",
+          "devanagari": "आमा",
+          "english": "mom",
+          "example_sentence_en": "Hello, mom!",
+          "example_sentence_np": "Aama, namaste!",
+          "id": "aama",
+          "romanized": "aama"
+        },
+        {
+          "audio_url": "/audio/nepal-v1/fam_baba_np.m4a",
+          "devanagari": "बाबा",
+          "english": "dad",
+          "example_sentence_en": "Dad, where are you?",
+          "example_sentence_np": "Baba, kaha ho?",
+          "id": "baba",
+          "romanized": "baba"
+        },
+        {
+          "audio_url": "/audio/nepal-v1/fam_didi_np.m4a",
+          "devanagari": "दिदी",
+          "english": "older sister",
+          "example_sentence_en": "Sister, help me!",
+          "example_sentence_np": "Didi, sahayog gara!",
+          "id": "didi",
+          "romanized": "didi"
+        },
+        {
+          "audio_url": "/audio/nepal-v1/fam_dai_np.m4a",
+          "devanagari": "दाइ",
+          "english": "older brother",
+          "example_sentence_en": "Brother, let's play!",
+          "example_sentence_np": "Dai, khelam!",
+          "id": "dai",
+          "romanized": "dai"
+        }
+      ]
+    }
+  ],
+  "id": "nepal-v1",
+  "language": "Nepali",
+  "quests": [
+    {
+      "description": "Five days of lights, crows, dogs, and brothers and sisters. Learn what each day means.",
+      "id": "tihar",
+      "min_age_band": "seedling",
+      "mission": "Say 'Shuva Tihar' to someone you love and record it for the Family Circle.",
+      "scenes": [
+        {
+          "audio_url": "/audio/nepal-v1/quest_tihar_1_np.m4a",
+          "id": "tihar-1",
+          "text_en": "Tihar is here! The house is bright, hearts are happy.",
+          "text_np_romanized": "Tihar aayo! Ghar ujyalo, mann khusi."
+        },
+        {
+          "audio_url": "/audio/nepal-v1/quest_tihar_2_np.m4a",
+          "choice_prompt": "Who do we honor on the first day?",
+          "choices": [
+            "The crow",
+            "The dog",
+            "The cow"
+          ],
+          "id": "tihar-2",
+          "text_en": "Day one: crow day. We offer rice to the crow.",
+          "text_np_romanized": "Pahilo din: kag tihar. Kag lai bhat dinchhau."
+        },
+        {
+          "audio_url": "/audio/nepal-v1/quest_tihar_3_np.m4a",
+          "id": "tihar-3",
+          "text_en": "On Bhai Tika, sisters put the seven-colored tika on their brothers.",
+          "text_np_romanized": "Bhai tika ma didi-bahini le dai-bhai lai saptarangi tika lagaidinchan."
+        }
+      ],
+      "title": "Tihar Is Coming"
+    }
+  ],
+  "version": "1.0.0"
+}
