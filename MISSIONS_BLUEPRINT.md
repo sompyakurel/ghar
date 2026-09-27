@@ -245,10 +245,37 @@ app. Never app-before-contract: that's how shape mismatches are born.
 
 If an idea isn't needed to test the §1 thesis, it waits.
 
-## 9. After missions
+## 9. v1.1 — after the cousin test (planned, not built)
 
-1. **Retention deepening** — whatever the cousin week teaches us. Streak rewards,
-   weekly festival missions, harder missions that unlock.
+Two ideas parked here from the 2026-09-27 review. Neither is part of v1.
+
+**Quiz-back — verify the learning, not the action.** After the kid taps "I did
+it!", ask one quick question tied to the mission, e.g. after tihar-greeting:
+"How do you say 'Happy Tihar' in Nepali?" A right answer confirms the actual
+goal (the phrase stuck); a wrong answer just shows the prompt again, no
+punishment. Cheap to build — one question per mission, sketched as future
+fields `quiz_prompt_en` / `quiz_answer` on the Mission model — zero COPPA
+surface, and ungameable without knowing the answer. Lighter variant: a
+reflection line, "Who did you do it with?" Costs nothing, makes mindless
+tapping feel weird.
+
+**Daily mission — the come-back-tomorrow engine.** One mission slot that
+regenerates every day from words the kid already learned, e.g. "Use one Food
+deck word at dinner tonight" or "Teach someone the word _momo_ today." Same
+Mission shape, but the `id` carries the date (e.g. `daily-2026-10-05`) so
+history stays clean and the slot never runs out. This is pull, not a lock:
+the 5 seed missions stay completable anytime; the daily just gives a reason
+to open the app tomorrow. Can start as a small hardcoded rotation in the app
+— no backend change needed — and get smarter later.
+
+**Still not in v1.1:** hard time-gating or locking missions. Withholding
+content punishes enthusiasm; revisit only if cousin data shows binge-then-churn.
+
+## 10. After missions
+
+1. **Retention deepening** — v1.1 above is the first concrete slice; then
+   whatever the cousin week teaches us. Streak rewards, weekly festival
+   missions, harder missions that unlock.
 2. **Teen mode (Rooted 14–20)** — the bet after this one. Older kids get
    conversation missions, slang, festival hosting (e.g. "run Deusi/Bhailo for
    your block").
