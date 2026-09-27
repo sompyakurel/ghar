@@ -2,7 +2,7 @@
 
 **Date:** 2026-09-27
 **Status:** Bet chosen. Build not started.
-**Decision:** Missions first. Som fills the 9 silent word clips; then we build.
+**Decision:** Missions first, wrapped in a fun layer — "Build your Ghar" house + listening quiz — so v1 is exciting enough to test. Som fills the 9 silent word clips; then we build.
 
 ## 0. Where we stand
 
@@ -23,6 +23,7 @@ taps flashcards.
 - He completes at least 5 missions.
 - He does at least 1 mission **without anyone asking him to**.
 - He tells Som about one mission in his own words.
+- He plays the quiz more than once without being asked (signals the fun layer works).
 
 If zero unprompted missions happen, the thesis is wrong and we ask him why —
 that's data, not failure.
@@ -171,10 +172,10 @@ struct ContentPack: Codable {
 
 ### 5b. `ContentView.swift` — a Missions tab
 
-Today the app is one `NavigationStack` showing decks. Missions are a peer of
-lessons, not a subsection, so the app grows a `TabView` with two tabs:
-"Lessons" (what exists now) and "Missions" (new). Roughly five lines to add
-the tab; the existing list code moves under the Lessons tab untouched.
+Today the app is one `NavigationStack` showing decks. The app grows a `TabView`
+with three tabs: "Lessons" (what exists now), "Missions" (new), and
+"My Ghar" (new — the house). The existing list code moves under the Lessons
+tab untouched; each new tab is one more view.
 
 ### 5c. New views — `MissionsView` + `MissionDetailView`
 
@@ -199,6 +200,44 @@ Three tiny values, all on-device:
 Teaching point for later: `@AppStorage` is a SwiftUI wrapper around
 `UserDefaults` — the phone's tiny key-value drawer. Same drawer, prettier key.
 
+### 5e. QuizView — the listening game (new)
+
+A game mode living under the Lessons tab (a "🎮 Quiz" button at the top pushes
+it). How a round works:
+1. The app picks a random word from the loaded decks and plays its audio —
+   the same AVPlayer one-liner as everywhere else.
+2. Three big buttons show candidate words (devanagari + English). One is
+   right, two are random decoys from the same deck.
+3. Tap the right one: +5 XP, happy sound, streak counter grows. Wrong one:
+   gentle shake, "try again" — no punishment, no lost XP.
+
+No new backend, no new audio, no new content model — it plays the words and
+clips we already have. Quiz XP flows into the same `xpTotal` as missions, so
+playing earns decorations for the house. That's the loop:
+**play → earn → decorate → show off.**
+
+### 5f. MyGharView — build your house (new)
+
+The app is called "home," so the kid gets one. A simple house illustration
+(drawn with SF Symbols / emoji — no art assets needed for v1) with decoration
+slots: door, windows, diyo lamp, prayer flags, and a tiny buddy character who
+lives in it and reacts (cheers on mission complete, sleeps when the streak is
+cold — all emoji state changes, no animation framework needed).
+
+- Decorations unlock at XP thresholds (e.g. every 25 XP unlocks the next one;
+  the kid picks the order from what's unlocked). Unlocked ids stored in
+  `@AppStorage` as a comma-separated string, same pattern as `doneMissions`.
+- Tapping the buddy shows total XP, streak, and missions completed — the
+  trophy shelf.
+- This is the thing the kid runs to show grandma. It makes XP *mean* something.
+
+### 5g. Juice pass — celebration on wins (new)
+
+Small, high-impact: confetti burst + cheerful sound when a mission is
+completed or a quiz streak hits 5. A boring tap becomes a *moment*. A simple
+custom confetti particle view (~40 lines) — no package needed. This is what
+makes the app feel alive instead of feeling like homework.
+
 ## 6. Build order — who does what
 
 | # | Step | Who | Notes |
@@ -208,15 +247,18 @@ Teaching point for later: `@AppStorage` is a SwiftUI wrapper around
 | 3 | Add the 5 seed missions to `nepal-v1.json`, validate, commit | Me (Som watches) | Teaching: validate after every content edit (`python -c` JSON check like before). |
 | 4 | Som opens `/docs`, GETs `/packs/nepal-v1`, finds `"missions"` | Som | The playground loop again — he sees his content flowing before any app code exists. |
 | 5 | Add `Mission` struct + `ContentPack.missions` to `Models.swift` | Me (Som watches) | Teaching: the mirror rule, snake→camel. |
-| 6 | `ContentView` grows a `TabView` (Lessons \| Missions) | Me (Som watches) | Teaching: TabView in ~5 lines; existing code moves untouched. |
+| 6 | `ContentView` grows a `TabView` (Lessons \| Missions \| My Ghar) | Me (Som watches) | Teaching: TabView in ~5 lines; existing code moves untouched. |
 | 7 | Build `MissionsView` + `MissionDetailView` | Me (Som watches) | Teaching: NavigationLink again, and the AVPlayer pattern reused — patterns compound. |
 | 8 | Completion + XP + streak via `@AppStorage` | Me (Som watches) | Teaching: UserDefaults drawer, why on-device = COPPA-safe. |
-| 9 | Som runs in simulator: opens Missions, plays a clip, taps "I did it", watches XP move | Som | End-to-end with his own voice on the clips. |
-| 10 | TestFlight → cousin | Together | See §7. |
-| 11 | Cousin test week → notes → iterate | Som + cousin, me on standby | Measure against §1 success criteria. |
+| 9 | Build `QuizView` — listening quiz, +5 XP per correct answer | Me (Som watches) | Teaching: game state in `@State`; decoys via `shuffled()`. No backend change. |
+| 10 | Build `MyGharView` — house, decoration unlocks, buddy | Me (Som watches) | Teaching: conditional views from `@AppStorage`; emoji as art assets. |
+| 11 | Juice pass — confetti + sounds on wins | Me (Som watches) | Teaching: tiny particle view; why "juice" matters more than features. |
+| 12 | Som runs in simulator: missions, quiz, watches his house fill up | Som | End-to-end with his own voice on the clips. |
+| 13 | TestFlight → cousin | Together | See §7. |
+| 14 | Cousin test week → notes → iterate | Som + cousin, me on standby | Measure against §1 success criteria. |
 
-Steps 2–8 are one sitting each, in order — backend contract, then content, then
-app. Never app-before-contract: that's how shape mismatches are born.
+Steps 2–11 are one sitting each, in order — backend contract, then content,
+then app. Never app-before-contract: that's how shape mismatches are born.
 
 ## 7. TestFlight beta (cousin = tester #1)
 
