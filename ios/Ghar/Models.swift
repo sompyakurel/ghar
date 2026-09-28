@@ -51,4 +51,20 @@ struct ContentPack: Codable {
     let language: String
     let decks: [Deck]
     let quests: [Quest]
+    let missions: [Mission]
+}
+
+/// A real-world mission: something the kid DOES, not a word list.
+/// Mirrors the backend's Mission model field-for-field — the same
+/// .convertFromSnakeCase trick translates title_ne -> titleNe.
+struct Mission: Codable, Identifiable {
+    let id: String
+    let titleEn: String       // "Tihar Greeting"
+    let titleNe: String       // "तिहारको शुभकामना"
+    let promptEn: String      // "Say 'Tihar ko subhakamana!'..."
+    let promptNe: String      // "तिहारको शुभकामना!"
+    let audioUrl: String      // "/audio/nepal-v1/tihar-greeting.m4a"
+    let festival: String?     // "tihar", or nil when it's not tied to one
+    let ageBand: String       // "all"
+    let xp: Int               // 10
 }

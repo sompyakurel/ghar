@@ -1,12 +1,14 @@
 import SwiftUI
 import AVFoundation
 
-/// First screen: list of lesson decks, loaded live from our Python backend.
+/// First screen: tab bar with Lessons and Missions, loaded live from our Python backend.
 ///
 /// Teaching notes:
 /// - `@State` = "this view owns this data, redraw when it changes."
 ///   When `pack` goes from nil -> loaded, SwiftUI rebuilds the list.
 /// - `.task { await load() }` runs once when the view appears.
+/// - `TabView` + `.tabItem` = the bottom tab bar (like Instagram's).
+///   Each tab gets its own NavigationStack so back-buttons stay separate.
 /// - `NavigationStack` + `NavigationLink` = free push navigation,
 ///   the iOS-standard drill-down pattern.
 struct ContentView: View {
@@ -14,20 +16,37 @@ struct ContentView: View {
     @State private var errorMessage: String?
 
     var body: some View {
-        NavigationStack {
-            Group {
-                if let pack {
-                    List(pack.decks) { deck in
-                        NavigationLink(destination: DeckView(deck: deck)) {
-                            VStack(alignment: .leading) {
-                                Text(deck.title).font(.headline)
-                                Text("\(deck.words.count) words")
-                                    .font(.subheadline)
-                                    .foregroundStyle(.secondary)
+        Group {
+            if let pack {
+                TabView {
+                    // --- Tab 1: Lessons (the deck list you already had) ---
+                    NavigationStack {
+                        List(pack.decks) { deck in
+                            NavigationLink(destination: DeckView(deck: deck)) {
+                                VStack(alignment: .leading) {
+                                    Text(deck.title).font(.headline)
+                                    Text("\(deck.words.count) words")
+                                        .font(.subheadline)
+                                        .foregroundStyle(.secondary)
+                                }
                             }
                         }
+                        .navigationTitle("Ghar 🇳🇵")
                     }
-                } else if let errorMessage {
+                    .tabItem {
+                        Label("Lessons", systemImage: "book.fill")
+                    }
+
+                    // --- Tab 2: Missions (new!) ---
+                    NavigationStack {
+                        MissionsView(missions: pack.missions)
+                            .navigationTitle("Missions")
+                    }
+                    .tabItem {
+                        Label("Missions", systemImage: "flag.fill")
+                    }
+                }
+            } else if let errorMessage {
                     VStack(spacing: 12) {
                         Text("Couldn't load lessons")
                             .font(.headline)
@@ -42,9 +61,7 @@ struct ContentView: View {
                     ProgressView("Loading Nepali lessons…")
                 }
             }
-            .navigationTitle("Ghar 🇳🇵")
             .task { await load() }
-        }
     }
 
     private func load() async {
@@ -52,6 +69,42 @@ struct ContentView: View {
             pack = try await GharAPI.shared.fetchPack()
         } catch {
             errorMessage = error.localizedDescription
+        }
+    }
+}
+
+/// The Missions tab: one row per mission — English title, the prompt,
+/// the Nepali title, and an XP badge. Tapping a row opens the detail
+/// screen (next step).
+///
+/// Teaching notes:
+/// - `List(missions)` works because Mission is Identifiable (it has `id`).
+/// - Rows are plain display for now — NavigationLink comes in step 3.
+struct MissionsView: View {
+    let missions: [Mission]
+
+    var body: some View {
+        List(missions) { mission in
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Text(mission.titleEn)
+                        .font(.headline)
+                    Spacer()
+                    Text("+\(mission.xp) XP")
+                        .font(.caption)
+                        .bold()
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(.orange.opacity(0.2))
+                        .clipShape(Capsule())
+                }
+                Text(mission.promptEn)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                Text(mission.titleNe)
+                    .font(.subheadline)
+            }
+            .padding(.vertical, 4)
         }
     }
 }
