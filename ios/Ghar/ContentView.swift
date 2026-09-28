@@ -74,38 +74,117 @@ struct ContentView: View {
 }
 
 /// The Missions tab: one row per mission — English title, the prompt,
-/// the Nepali title, and an XP badge. Tapping a row opens the detail
-/// screen (next step).
+/// the Nepali title, and an XP badge. Tapping a row pushes the detail screen.
 ///
 /// Teaching notes:
 /// - `List(missions)` works because Mission is Identifiable (it has `id`).
-/// - Rows are plain display for now — NavigationLink comes in step 3.
+/// - `NavigationLink(destination:)` turns each row into a tappable link.
+///   The row content becomes the label (what you tap); the destination
+///   is the screen you land on.
 struct MissionsView: View {
     let missions: [Mission]
 
     var body: some View {
         List(missions) { mission in
-            VStack(alignment: .leading, spacing: 4) {
-                HStack {
-                    Text(mission.titleEn)
-                        .font(.headline)
-                    Spacer()
-                    Text("+\(mission.xp) XP")
-                        .font(.caption)
-                        .bold()
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(.orange.opacity(0.2))
-                        .clipShape(Capsule())
+            NavigationLink(destination: MissionDetailView(mission: mission)) {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Text(mission.titleEn)
+                            .font(.headline)
+                        Spacer()
+                        Text("+\(mission.xp) XP")
+                            .font(.caption)
+                            .bold()
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(.orange.opacity(0.2))
+                            .clipShape(Capsule())
+                    }
+                    Text(mission.promptEn)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                    Text(mission.titleNe)
+                        .font(.subheadline)
                 }
-                Text(mission.promptEn)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                Text(mission.titleNe)
-                    .font(.subheadline)
+                .padding(.vertical, 4)
             }
-            .padding(.vertical, 4)
         }
+    }
+}
+
+/// Tapping a mission row opens this: the full prompt in English + Nepali,
+/// a play button for the recorded instruction, and an "I did it!" button.
+/// (The audio files come later — the play button stays silent until then,
+/// same as the quest scenes the first time. No crash, just quiet.)
+///
+/// Teaching notes:
+/// - Same pattern as DeckView: the parent hands this view a `mission`,
+///   and this view just displays it. Data flows down, never up.
+/// - `@State private var didIt` is this screen's own memory — tap the
+///   button and the checkmark appears. It forgets when you leave the
+///   screen; making it permanent is step 4 (@AppStorage).
+/// - The play button reuses the AVPlayer trick from DeckView: the player
+///   lives in @State so SwiftUI doesn't throw it away mid-sound.
+struct MissionDetailView: View {
+    let mission: Mission
+    @State private var player: AVPlayer?
+    @State private var didIt = false
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                Text(mission.titleNe)
+                    .font(.largeTitle)
+                Text(mission.titleEn)
+                    .font(.title2)
+                    .bold()
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(mission.promptEn)
+                        .font(.body)
+                    Text(mission.promptNe)
+                        .font(.body)
+                        .foregroundStyle(.secondary)
+                }
+                .padding()
+                .background(.gray.opacity(0.1))
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+
+                HStack {
+                    Button(action: play) {
+                        Label("Play instruction", systemImage: "speaker.wave.2.fill")
+                    }
+                    .buttonStyle(.borderedProminent)
+
+                    Spacer()
+
+                    Text("+\(mission.xp) XP")
+                        .font(.headline)
+                        .foregroundStyle(.orange)
+                }
+
+                Button(action: { didIt.toggle() }) {
+                    Label(didIt ? "Done!" : "I did it!",
+                          systemImage: didIt ? "checkmark.circle.fill" : "circle")
+                        .font(.title3)
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .tint(didIt ? .green : .blue)
+            }
+            .padding()
+        }
+        .navigationTitle(mission.titleEn)
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    /// Same streaming trick as DeckView: server address + path from JSON.
+    /// Until you record the clips, the file isn't there — AVPlayer just
+    /// stays quiet instead of crashing.
+    private func play() {
+        guard let url = URL(string: GharAPI.baseURLString + mission.audioUrl) else { return }
+        player = AVPlayer(url: url)
+        player?.play()
     }
 }
 
