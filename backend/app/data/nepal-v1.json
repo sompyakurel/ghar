@@ -184,5 +184,62 @@
             "title": "Tihar Is Coming"
         }
     ],
+    "missions": [
+        {
+            "id": "tihar-greeting",
+            "title_en": "Tihar Greeting",
+            "title_ne": "तिहारको शुभकामना",
+            "prompt_en": "Say 'Shuva Tihar!' to someone you love.",
+            "prompt_ne": "शुभ तिहार!",
+            "audio_url": "/audio/nepal-v1/tihar-greeting.m4a",
+            "festival": "tihar",
+            "age_band": "all",
+            "xp": 10
+        },
+        {
+            "id": "count-to-five",
+            "title_en": "Count to Five",
+            "title_ne": "पाँचसम्म गन्नुहोस्",
+            "prompt_en": "Count to 5 in Nepali — ek, dui, tin, char, paanch — for a family member.",
+            "prompt_ne": "एक, दुई, तीन, चार, पाँच",
+            "audio_url": "/audio/nepal-v1/count-to-five.m4a",
+            "festival": null,
+            "age_band": "all",
+            "xp": 10
+        },
+        {
+            "id": "dinner-words",
+            "title_en": "Dinner Words",
+            "title_ne": "खानाका शब्दहरू",
+            "prompt_en": "At dinner, point to 3 foods and say their Nepali names.",
+            "prompt_ne": "तीनवटा खानेकुराको नेपाली नाम भन्नुहोस्।",
+            "audio_url": "/audio/nepal-v1/dinner-words.m4a",
+            "festival": null,
+            "age_band": "all",
+            "xp": 10
+        },
+        {
+            "id": "deusi-line",
+            "title_en": "Deusi Line",
+            "title_ne": "देउसी गाउनुहोस्",
+            "prompt_en": "Learn one Deusi/Bhailo line and sing it for your family.",
+            "prompt_ne": "देउसीको एउटा हरफ गाउनुहोस्।",
+            "audio_url": "/audio/nepal-v1/deusi-line.m4a",
+            "festival": "tihar",
+            "age_band": "all",
+            "xp": 10
+        },
+        {
+            "id": "tihar-smell",
+            "title_en": "What Tihar Smelled Like",
+            "title_ne": "तिहारको बासना",
+            "prompt_en": "Ask your grandparents: what did Tihar smell like when you were little?",
+            "prompt_ne": "तपाईं सानो हुँदा तिहारको बासना कस्तो थियो?",
+            "audio_url": "/audio/nepal-v1/tihar-smell.m4a",
+            "festival": "tihar",
+            "age_band": "all",
+            "xp": 10
+        }
+    ],
     "version": "1.0.0"
 }

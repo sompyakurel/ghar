@@ -52,6 +52,18 @@ class Quest(BaseModel):
     mission: str                 # real-world mission, e.g. "Say 'Shuva Tihar' to someone you love"
 
 
+class Mission(BaseModel):
+    id: str                       # e.g. "tihar-greeting"
+    title_en: str                 # "Tihar Greeting"
+    title_ne: str                 # "तिहारको शुभकामना"
+    prompt_en: str                # "Say 'Shuva Tihar!' to someone you love."
+    prompt_ne: str                # "शुभ तिहार!"
+    audio_url: str                # "/audio/nepal-v1/tihar-greeting.m4a"
+    festival: str | None = None   # "tihar" — groups seasonal missions
+    age_band: str = "all"         # "all" | "seedling" | "explorer" | "rooted"
+    xp: int = 10
+
+
 class ContentPack(BaseModel):
     """One country's full content. Nepal = nepal-v1. Adding a new country
     later = a new JSON file + new audio. No code changes, no app update."""
@@ -61,3 +73,4 @@ class ContentPack(BaseModel):
     language: str                # "Nepali"
     decks: list[Deck]
     quests: list[Quest]
+    missions: list[Mission] = []  # default [] keeps packs without missions valid
