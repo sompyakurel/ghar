@@ -192,7 +192,8 @@ struct MissionDetailView: View {
         var ids = completedIDs
         if ids.contains(mission.id) {
             ids.remove(mission.id)
-            totalXP -= mission.xp
+            // Never go below zero: XP already spent in the shop stays spent.
+            totalXP = max(0, totalXP - mission.xp)
         } else {
             ids.insert(mission.id)
             totalXP += mission.xp
@@ -539,44 +540,58 @@ enum WinFanfare {
     }
 }
 
-/// The My Ghar tab: your house, built from your XP — now a little alive.
-/// Name it, paint it, poke the decorations, and watch clouds drift by.
-/// The roof and walls are always there; every decoration unlocks at an XP
-/// threshold — locked ones show as grey silhouettes so the kid sees what's
-/// coming.
+/// The My Ghar tab: your house, built from your XP — now with a shop.
+/// Nothing is auto-added: kids spend XP in the Ghar Shop to add each
+/// decoration. Name it, paint it, poke the decorations — and tap any
+/// decoration to hear its Nepali name spoken out loud.
 ///
 /// Teaching notes:
 /// - Still zero image assets: sky, sun, clouds, and the whole house are
 ///   shapes (circles, triangles, rounded rectangles).
-/// - Everything keys off the same "ghar.xp.total" locker. Earn XP in
-///   the quiz or missions, the house builds itself. One source of truth.
-/// - Personalization (name, paint) lives in @AppStorage too — on-device,
-///   no login, COPPA-safe, survives app restarts.
-/// - The "poke" pattern: each decoration owns one Bool. Tap flips it on
-///   with a spring animation, then a short timer flips it back. Same
-///   self-dismissing idea as the confetti — and like the confetti fix,
-///   it always resets through the helper so it can't get stuck.
-/// - DriftingCloud animates itself: `repeatForever(autoreverses: true)`
-///   on a linear animation = endless gentle motion with no timer at all.
+/// - The XP total is the wallet: buying deducts from the same
+///   "ghar.xp.total" locker that missions and the quiz feed.
+/// - Owned decorations live in @AppStorage as a JSON-encoded Set<String>
+///   — the same packing trick as completed missions. On-device, no login,
+///   COPPA-safe, survives restarts.
+/// - Tap-to-speak uses NepaliSpeaker (AVSpeechSynthesizer, ne-NP voice):
+///   real spoken Nepali with zero audio files to record.
+/// - The "poke" pattern from before is still here — now each tap both
+///   speaks the Nepali name AND pops the decoration.
 struct MyGharView: View {
     @AppStorage("ghar.xp.total") private var totalXP = 0
     @AppStorage("ghar.house.name") private var houseName = ""
     @AppStorage("ghar.house.roof") private var roofChoice = 0
     @AppStorage("ghar.house.walls") private var wallChoice = 0
     @AppStorage("ghar.last.win") private var lastWin = ""
+    @AppStorage("ghar.shop.owned") private var ownedData = Data()
 
     // Poke-state: one Bool per decoration. Tap -> true (spring!) -> timer -> false.
     @State private var diyoPop = false
     @State private var buddyPop = false
     @State private var flagsPop = false
     @State private var doorPop = false
+    @State private var windowsPop = false
 
-    // Early, fast rewards: the very first correct quiz answer lights the diyo.
-    private let diyoAt = 5
-    private let windowsAt = 15
-    private let doorAt = 30
-    private let flagsAt = 50
-    private let buddyAt = 80
+    // The shop: spend XP to add decorations — nothing is auto-added.
+    // Prices are tuned so the first quiz win (5 XP) buys the diyo,
+    // and the buddy (80 XP) is a real savings goal.
+    private let shopItems: [ShopItem] = [
+        ShopItem(id: "diyo", nameEn: "Diyo lamp", nameNe: "दियो", icon: "🪔", cost: 5),
+        ShopItem(id: "windows", nameEn: "Windows", nameNe: "झ्याल", icon: "🪟", cost: 15),
+        ShopItem(id: "door", nameEn: "Door", nameNe: "ढोका", icon: "🚪", cost: 30),
+        ShopItem(id: "flags", nameEn: "Prayer flags", nameNe: "प्रार्थना झण्डा", icon: "🚩", cost: 50),
+        ShopItem(id: "buddy", nameEn: "Buddy", nameNe: "साथी", icon: "😊", cost: 80),
+    ]
+
+    /// IDs of purchased decorations, decoded from storage.
+    private var ownedIDs: Set<String> {
+        (try? JSONDecoder().decode(Set<String>.self, from: ownedData)) ?? []
+    }
+
+    /// The Nepali name for a decoration id — what gets spoken on tap.
+    private func nepaliName(for id: String) -> String {
+        shopItems.first { $0.id == id }?.nameNe ?? id
+    }
 
     private let roofColors: [(name: String, color: Color)] = [
         ("Crimson", Color(red: 0.75, green: 0.15, blue: 0.2)),
@@ -592,18 +607,6 @@ struct MyGharView: View {
     ]
 
     private let flagColors: [Color] = [.blue, .orange, .red, .green, .yellow]
-
-    /// The collection shelf: every decoration, its price in XP, and whether
-    /// it's unlocked yet. Single source for the shelf below the house.
-    private var decorations: [(name: String, icon: String, threshold: Int)] {
-        [
-            (name: "Diyo lamp", icon: "🪔", threshold: diyoAt),
-            (name: "Windows", icon: "🪟", threshold: windowsAt),
-            (name: "Door", icon: "🚪", threshold: doorAt),
-            (name: "Prayer flags", icon: "🚩", threshold: flagsAt),
-            (name: "Buddy", icon: "😊", threshold: buddyAt),
-        ]
-    }
 
     var body: some View {
         ScrollView {
@@ -644,16 +647,21 @@ struct MyGharView: View {
                     DriftingCloud(startX: -50, y: -105)
 
                     VStack(spacing: 0) {
-                        // Prayer flags fly above the roof — tap to make them dance.
+                        // Prayer flags fly above the roof — tap to hear + see them dance.
                         HStack(spacing: 6) {
                             ForEach(0..<7, id: \.self) { i in
                                 Triangle()
-                                    .fill(totalXP >= flagsAt ? flagColors[i % flagColors.count] : .gray.opacity(0.25))
+                                    .fill(ownedIDs.contains("flags") ? flagColors[i % flagColors.count] : .gray.opacity(0.25))
                                     .frame(width: 24, height: 20)
                             }
                         }
                         .rotationEffect(.degrees(flagsPop ? 10 : -10))
-                        .onTapGesture { if totalXP >= flagsAt { poke { flagsPop = $0 } } }
+                        .onTapGesture {
+                            if ownedIDs.contains("flags") {
+                                NepaliSpeaker.say(nepaliName(for: "flags"))
+                                poke { flagsPop = $0 }
+                            }
+                        }
                         .padding(.bottom, 4)
 
                         // Roof — painted whatever color the kid picked.
@@ -673,23 +681,45 @@ struct MyGharView: View {
                                 window
                             }
                             .offset(y: -40)
+                            .scaleEffect(windowsPop ? 1.15 : 1.0)
+                            .onTapGesture {
+                                if ownedIDs.contains("windows") {
+                                    NepaliSpeaker.say(nepaliName(for: "windows"))
+                                    poke { windowsPop = $0 }
+                                }
+                            }
 
-                            // Door — tap to knock (it swings on its hinge).
+                            // Door — tap to hear its name + knock (swings on its hinge).
                             RoundedRectangle(cornerRadius: 6)
-                                .fill(totalXP >= doorAt ? .brown : .gray.opacity(0.25))
+                                .fill(ownedIDs.contains("door") ? .brown : .gray.opacity(0.25))
                                 .frame(width: 54, height: 84)
                                 .rotationEffect(.degrees(doorPop ? -14 : 0), anchor: .leading)
-                                .onTapGesture { if totalXP >= doorAt { poke { doorPop = $0 } } }
+                                .onTapGesture {
+                                    if ownedIDs.contains("door") {
+                                        NepaliSpeaker.say(nepaliName(for: "door"))
+                                        poke { doorPop = $0 }
+                                    }
+                                }
                                 .offset(y: 38)
 
                             diyo
                                 .offset(x: -72, y: 48)
                                 .scaleEffect(diyoPop ? 1.35 : 1.0)
-                                .onTapGesture { if totalXP >= diyoAt { poke { diyoPop = $0 } } }
+                                .onTapGesture {
+                                    if ownedIDs.contains("diyo") {
+                                        NepaliSpeaker.say(nepaliName(for: "diyo"))
+                                        poke { diyoPop = $0 }
+                                    }
+                                }
 
                             buddy
                                 .offset(x: 72, y: 42 + (buddyPop ? -16 : 0))
-                                .onTapGesture { if totalXP >= buddyAt { poke { buddyPop = $0 } } }
+                                .onTapGesture {
+                                    if ownedIDs.contains("buddy") {
+                                        NepaliSpeaker.say(nepaliName(for: "buddy"))
+                                        poke { buddyPop = $0 }
+                                    }
+                                }
                         }
                     }
                     .offset(y: 40)
@@ -707,18 +737,31 @@ struct MyGharView: View {
                 }
                 .padding(.horizontal)
 
-                // Collection shelf.
-                VStack(alignment: .leading, spacing: 10) {
-                    ForEach(decorations, id: \.name) { d in
-                        HStack {
-                            Text(d.icon).font(.title2)
-                            Text(d.name)
+                // Ghar Shop: spend XP to add decorations to your house.
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("🏪 Ghar Shop")
+                        .font(.headline)
+                    ForEach(shopItems) { item in
+                        HStack(spacing: 12) {
+                            Text(item.icon).font(.title2)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(item.nameNe).font(.headline)
+                                Text(item.nameEn).font(.caption).foregroundStyle(.secondary)
+                            }
+                            Button(action: { NepaliSpeaker.say(item.nameNe) }) {
+                                Image(systemName: "speaker.wave.2.fill")
+                            }
+                            .buttonStyle(.bordered)
                             Spacer()
-                            if totalXP >= d.threshold {
+                            if ownedIDs.contains(item.id) {
                                 Image(systemName: "checkmark.circle.fill")
                                     .foregroundStyle(.green)
+                                    .font(.title3)
+                            } else if totalXP >= item.cost {
+                                Button("Buy · \(item.cost) XP") { buy(item) }
+                                    .buttonStyle(.borderedProminent)
                             } else {
-                                Text("🔒 \(d.threshold) XP")
+                                Text("🔒 \(item.cost) XP")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }
@@ -730,12 +773,25 @@ struct MyGharView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 12))
                 .padding(.horizontal)
 
-                Text("Tap the decorations — they like it. 👆")
+                Text("Tap a decoration to hear its Nepali name 🗣️")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
             .padding(.vertical)
         }
+    }
+
+    /// Buy a decoration: must be affordable and not already owned.
+    /// Deducts the XP, marks it owned, then speaks its Nepali name
+    /// out loud as a little celebration.
+    private func buy(_ item: ShopItem) {
+        guard !ownedIDs.contains(item.id), totalXP >= item.cost else { return }
+        totalXP -= item.cost
+        var ids = ownedIDs
+        ids.insert(item.id)
+        ownedData = (try? JSONEncoder().encode(ids)) ?? Data()
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
+        NepaliSpeaker.say(item.nameNe)
     }
 
     /// One paint row: a label plus tappable color swatches. The selected
@@ -768,7 +824,7 @@ struct MyGharView: View {
 
     /// The "poke" pattern: pop a decoration with a spring, then settle it
     /// back after a beat. The Bool arrives as a setter closure so one
-    /// helper serves all four decorations.
+    /// helper serves all five decorations.
     private func poke(_ set: @escaping (Bool) -> Void) {
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
         withAnimation(.spring(response: 0.3, dampingFraction: 0.35)) { set(true) }
@@ -777,34 +833,34 @@ struct MyGharView: View {
         }
     }
 
-    /// A window: blue pane when unlocked, grey silhouette when locked.
+    /// A window: blue pane when owned, grey silhouette when not yet bought.
     private var window: some View {
         RoundedRectangle(cornerRadius: 4)
-            .fill(totalXP >= windowsAt ? Color(red: 0.5, green: 0.75, blue: 0.95) : .gray.opacity(0.25))
+            .fill(ownedIDs.contains("windows") ? Color(red: 0.5, green: 0.75, blue: 0.95) : .gray.opacity(0.25))
             .frame(width: 42, height: 42)
     }
 
-    /// A diyo (oil lamp): clay base with a flame, or grey when locked.
+    /// A diyo (oil lamp): clay base with a flame, or grey when not yet bought.
     /// Popping it scales the whole lamp up — the flame looks like it flares.
     private var diyo: some View {
         VStack(spacing: 1) {
             Circle()
-                .fill(totalXP >= diyoAt ? (diyoPop ? .yellow : .orange) : .gray.opacity(0.25))
+                .fill(ownedIDs.contains("diyo") ? (diyoPop ? .yellow : .orange) : .gray.opacity(0.25))
                 .frame(width: 14, height: 14)
             Ellipse()
-                .fill(totalXP >= diyoAt ? .brown : .gray.opacity(0.25))
+                .fill(ownedIDs.contains("diyo") ? .brown : .gray.opacity(0.25))
                 .frame(width: 30, height: 12)
         }
     }
 
-    /// The buddy: a little round friend who moves in at 80 XP.
+    /// The buddy: a little round friend who moves in once you buy him.
     /// Popping it makes it hop.
     private var buddy: some View {
         ZStack {
             Circle()
-                .fill(totalXP >= buddyAt ? .yellow : .gray.opacity(0.25))
+                .fill(ownedIDs.contains("buddy") ? .yellow : .gray.opacity(0.25))
                 .frame(width: 38, height: 38)
-            if totalXP >= buddyAt {
+            if ownedIDs.contains("buddy") {
                 HStack(spacing: 8) {
                     Circle().fill(.black).frame(width: 5, height: 5)
                     Circle().fill(.black).frame(width: 5, height: 5)
@@ -836,6 +892,41 @@ struct DriftingCloud: View {
                 drifted = true
             }
         }
+    }
+}
+
+/// One thing the Ghar Shop sells: its English + Nepali names,
+/// its icon, and its price in XP.
+struct ShopItem: Identifiable {
+    let id: String
+    let nameEn: String
+    let nameNe: String
+    let icon: String
+    let cost: Int
+}
+
+/// Says a Nepali word out loud with the phone's own Nepali voice —
+/// no recordings needed. Prefers a real Nepali (ne-NP) voice; if none
+/// is installed it falls back to the default voice, which does its best.
+/// (On a real iPhone: Settings → Accessibility → Spoken Content → Voices
+///  to download the Nepali voice for perfect pronunciation.)
+///
+/// Teaching notes:
+/// - Same AVSpeechSynthesizer engine as the win cheers, but its OWN
+///   synthesizer — so tapping a decoration never cuts off a celebration
+///   mid-cheer, and vice versa.
+/// - `stopSpeaking(at: .immediate)` before each word: rapid tapping
+///   re-speaks instead of queueing up a backlog of words.
+/// - Slow rate (0.45): these are vocabulary words for learners, not cheers.
+enum NepaliSpeaker {
+    private static let synth = AVSpeechSynthesizer()
+
+    static func say(_ nepali: String) {
+        synth.stopSpeaking(at: .immediate)
+        let utterance = AVSpeechUtterance(string: nepali)
+        utterance.voice = AVSpeechSynthesisVoice(language: "ne-NP") // nil → default voice
+        utterance.rate = 0.45
+        synth.speak(utterance)
     }
 }
 
