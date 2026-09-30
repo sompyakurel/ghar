@@ -470,33 +470,52 @@ struct ConfettiBurst: View {
 ///   hair apart for the rising C-E-G arpeggio.
 /// - The engine lives in a `static var` so nothing throws it away
 ///   mid-chime — same reason the AVPlayer lives in @State elsewhere.
+/// - `engine.start()` runs on a background queue, never the main thread.
+///   The main thread IS the UI: if it waits on hardware, the app freezes.
+///   (Suspected cause of the quiz-freeze — so the engine got quarantined.)
 /// - `UINotificationFeedbackGenerator` = the iPhone success buzz. One
 ///   line, and it's the Apple-approved way to say "you did it!"
 enum WinFanfare {
-    private static var engine: AVAudioEngine?
+    /// Holds the engine while a chime plays so nothing throws it away
+    /// mid-note — same reason the AVPlayer lives in @State elsewhere.
+    private static var engineHolder: AVAudioEngine?
 
     static func play() {
+        // Haptic stays on the main thread — we're already on it, since this
+        // runs straight from a button tap.
         UINotificationFeedbackGenerator().notificationOccurred(.success)
 
-        let engine = AVAudioEngine()
-        self.engine = engine
-        let player = AVAudioPlayerNode()
-        engine.attach(player)
-        engine.connect(player, to: engine.mainMixerNode, format: nil)
-        do { try engine.start() } catch { return }
-        player.play()
-
-        // C5 -> E5 -> G5, each 0.12s apart: a rising major arpeggio.
-        for (i, freq) in [523.25, 659.25, 783.99].enumerated() {
-            DispatchQueue.main.asyncAfter(deadline: .now() + Double(i) * 0.12) {
-                player.scheduleBuffer(toneBuffer(frequency: freq), completionHandler: nil)
+        // The audio engine shakes hands with real audio hardware when it
+        // starts, and on the simulator that handshake can stall. So it runs
+        // OFF the main thread: the main thread is the UI thread, and if it
+        // ever waits on hardware, the whole app freezes. Worst case now the
+        // chime just doesn't play — the app stays alive.
+        DispatchQueue.global(qos: .userInitiated).async {
+            let engine = AVAudioEngine()
+            engineHolder = engine
+            let player = AVAudioPlayerNode()
+            engine.attach(player)
+            engine.connect(player, to: engine.mainMixerNode, format: nil)
+            do {
+                try engine.start()
+            } catch {
+                if engineHolder === engine { engineHolder = nil }
+                return
             }
-        }
+            player.play()
 
-        // Clean up after the last note rings out.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
-            engine.stop()
-            self.engine = nil
+            // C5 -> E5 -> G5, each 0.12s apart: a rising major arpeggio.
+            for (i, freq) in [523.25, 659.25, 783.99].enumerated() {
+                DispatchQueue.main.asyncAfter(deadline: .now() + Double(i) * 0.12) {
+                    player.scheduleBuffer(toneBuffer(frequency: freq), completionHandler: nil)
+                }
+            }
+
+            // Clean up after the last note rings out.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+                engine.stop()
+                if engineHolder === engine { engineHolder = nil }
+            }
         }
     }
 
