@@ -47,9 +47,9 @@ struct ContentView: View {
                         Label("Missions", systemImage: "flag.fill")
                     }
 
-                    // --- Tab 3: Quiz (listening game) ---
+                    // --- Tab 3: Quiz (listening game, with sections) ---
                     NavigationStack {
-                        QuizView(words: pack.decks.flatMap { $0.words })
+                        QuizMenuView(pack: pack)
                             .navigationTitle("Quiz")
                     }
                     .tabItem {
@@ -281,6 +281,53 @@ struct MissionDetailView: View {
         guard let url = URL(string: GharAPI.baseURLString + mission.audioUrl) else { return }
         player = AVPlayer(url: url)
         player?.play()
+    }
+}
+
+/// The Quiz tab menu: one row per quiz section. A section with no
+/// recorded audio yet (like Animals right now) shows dimmed with a
+/// "Recordings coming soon" note — and wakes up on its own the moment
+/// Som's recordings land, no code change needed.
+struct QuizMenuView: View {
+    let pack: ContentPack
+
+    /// (title, words) per section, in display order. Animals gets its own
+    /// row; everything else plays together under Words.
+    private var sections: [(title: String, words: [Word])] {
+        let animals = pack.decks.first { $0.id == "animals" }?.words ?? []
+        let rest = pack.decks.filter { $0.id != "animals" }.flatMap { $0.words }
+        return [("Words", rest), ("Animals", animals)]
+    }
+
+    var body: some View {
+        List {
+            ForEach(sections.indices, id: \.self) { i in
+                let section = sections[i]
+                let audible = section.words.filter { $0.hasAudio ?? true }
+                if audible.isEmpty {
+                    // Silent for now — nothing to hear yet, so no game.
+                    // This row enables itself once recordings exist.
+                    Label {
+                        VStack(alignment: .leading) {
+                            Text(section.title).font(.headline)
+                            Text("Recordings coming soon")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    } icon: {
+                        Image(systemName: "speaker.slash.fill")
+                    }
+                    .opacity(0.45)
+                } else {
+                    NavigationLink {
+                        QuizView(words: section.words)
+                            .navigationTitle("\(section.title) Quiz")
+                    } label: {
+                        Label(section.title, systemImage: "questionmark.circle.fill")
+                    }
+                }
+            }
+        }
     }
 }
 
