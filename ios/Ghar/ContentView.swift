@@ -1117,7 +1117,7 @@ struct FestivalScene: View {
                 }
             }
         }
-        .onChange(of: teachingWord == nil) { cardClosed in
+        .onChange(of: teachingWord == nil) { _, cardClosed in
             // The card just closed: if that was the last treasure,
             // now is the moment for the voice cheer + confetti.
             if cardClosed { celebrateIfDone() }
