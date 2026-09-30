@@ -74,21 +74,39 @@ struct ContentView: View {
 }
 
 /// The Missions tab: one row per mission — English title, the prompt,
-/// the Nepali title, and an XP badge. Tapping a row pushes the detail screen.
+/// the Nepali title, and an XP badge. Finished missions get a green
+/// checkmark; your total XP sits top-right. Tapping a row pushes the
+/// detail screen.
 ///
 /// Teaching notes:
 /// - `List(missions)` works because Mission is Identifiable (it has `id`).
 /// - `NavigationLink(destination:)` turns each row into a tappable link.
 ///   The row content becomes the label (what you tap); the destination
 ///   is the screen you land on.
+/// - `@AppStorage` here uses the SAME keys as MissionDetailView. Two views
+///   declaring the same key share the value live: tap "I did it!" over
+///   there, the checkmark appears here with zero extra wiring.
 struct MissionsView: View {
     let missions: [Mission]
+    @AppStorage("ghar.xp.total") private var totalXP = 0
+    @AppStorage("ghar.missions.completed") private var completedData = Data()
+
+    /// The IDs of finished missions, decoded from storage.
+    /// @AppStorage only holds simple types (Int, String, Data...), so a Set
+    /// gets JSON-encoded into Data — our little packing trick.
+    private var completedIDs: Set<String> {
+        (try? JSONDecoder().decode(Set<String>.self, from: completedData)) ?? []
+    }
 
     var body: some View {
         List(missions) { mission in
             NavigationLink(destination: MissionDetailView(mission: mission)) {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack {
+                        if completedIDs.contains(mission.id) {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundStyle(.green)
+                        }
                         Text(mission.titleEn)
                             .font(.headline)
                         Spacer()
@@ -109,6 +127,12 @@ struct MissionsView: View {
                 .padding(.vertical, 4)
             }
         }
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Text("⭐ \(totalXP) XP")
+                    .font(.headline)
+            }
+        }
     }
 }
 
@@ -120,15 +144,38 @@ struct MissionsView: View {
 /// Teaching notes:
 /// - Same pattern as DeckView: the parent hands this view a `mission`,
 ///   and this view just displays it. Data flows down, never up.
-/// - `@State private var didIt` is this screen's own memory — tap the
-///   button and the checkmark appears. It forgets when you leave the
-///   screen; making it permanent is step 4 (@AppStorage).
+/// - Done-state now lives in @AppStorage (the phone's own storage), not
+///   @State. @State forgot when you left the screen — @AppStorage remembers
+///   forever, with no login and no server (that's the COPPA-safe part).
+/// - XP bookkeeping: +xp when you complete, −xp if you un-complete, so
+///   tapping twice can't double-count.
 /// - The play button reuses the AVPlayer trick from DeckView: the player
 ///   lives in @State so SwiftUI doesn't throw it away mid-sound.
 struct MissionDetailView: View {
     let mission: Mission
     @State private var player: AVPlayer?
-    @State private var didIt = false
+    @AppStorage("ghar.xp.total") private var totalXP = 0
+    @AppStorage("ghar.missions.completed") private var completedData = Data()
+
+    private var completedIDs: Set<String> {
+        (try? JSONDecoder().decode(Set<String>.self, from: completedData)) ?? []
+    }
+
+    private var isDone: Bool { completedIDs.contains(mission.id) }
+
+    /// Toggle completion: update the ID set AND the XP total together,
+    /// so the two can never disagree with each other.
+    private func toggleDone() {
+        var ids = completedIDs
+        if ids.contains(mission.id) {
+            ids.remove(mission.id)
+            totalXP -= mission.xp
+        } else {
+            ids.insert(mission.id)
+            totalXP += mission.xp
+        }
+        completedData = (try? JSONEncoder().encode(ids)) ?? Data()
+    }
 
     var body: some View {
         ScrollView {
@@ -163,14 +210,14 @@ struct MissionDetailView: View {
                         .foregroundStyle(.orange)
                 }
 
-                Button(action: { didIt.toggle() }) {
-                    Label(didIt ? "Done!" : "I did it!",
-                          systemImage: didIt ? "checkmark.circle.fill" : "circle")
+                Button(action: toggleDone) {
+                    Label(isDone ? "Done!" : "I did it!",
+                          systemImage: isDone ? "checkmark.circle.fill" : "circle")
                         .font(.title3)
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.bordered)
-                .tint(didIt ? .green : .blue)
+                .tint(isDone ? .green : .blue)
             }
             .padding()
         }
