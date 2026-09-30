@@ -195,7 +195,7 @@ struct MissionDetailView: View {
         } else {
             ids.insert(mission.id)
             totalXP += mission.xp
-            // The win moment: chime + confetti. (Un-completing stays quiet.)
+            // The win moment: voice cheer + confetti. (Un-completing stays quiet.)
             WinFanfare.play()
             showConfetti = true
         }
@@ -371,7 +371,7 @@ struct QuizView: View {
         if option.id == current?.id {
             solved = true
             totalXP += 5
-            // The win moment: chime + confetti.
+            // The win moment: voice cheer + confetti.
             WinFanfare.play()
             showConfetti = true
         } else {
@@ -459,104 +459,61 @@ struct ConfettiBurst: View {
     }
 }
 
-/// Plays a tiny "ta-da!" chime — synthesized on the spot with math,
-/// no audio files needed. Also fires the Apple-blessed success haptic.
+/// Cheers out loud on a win — a random celebration line spoken by the
+/// phone's own voice, no audio files needed. Also fires the
+/// Apple-blessed success haptic.
 ///
 /// Teaching notes:
-/// - Sound is just air wiggling: a sine wave at 523 Hz IS the note C5.
-///   We fill a buffer with sine values, fading out so it doesn't click.
-/// - `AVAudioEngine` is Apple's pro-audio plumbing: attach a player node,
-///   connect it to the speaker (mainMixerNode), schedule three buffers a
-///   hair apart for the rising C-E-G arpeggio.
-/// - Format matching is LAW: a scheduled buffer's format must equal the
-///   player's output format exactly, or scheduleBuffer crashes. We ask the
-///   hardware for its format and synthesize in exactly that — the old
-///   hardcoded 44.1 kHz mono vs the simulator's 48 kHz hardware was the
-///   crash Xcode pointed at.
-/// - The engine lives in a `static var` so nothing throws it away
-///   mid-chime — same reason the AVPlayer lives in @State elsewhere.
-/// - `engine.start()` runs on a background queue, never the main thread.
-///   The main thread IS the UI: if it waits on hardware, the app freezes.
-///   (Suspected cause of the quiz-freeze — so the engine got quarantined.)
+/// - `AVSpeechSynthesizer` is iOS's built-in text-to-speech: hand it an
+///   `AVSpeechUtterance` (the words + voice + speed + pitch) and it talks.
+///   Free, offline, zero assets — same "no files needed" win as the old
+///   synthesized chime, but way more delightful.
+/// - The line is picked at random each win from a pool spanning playful
+///   ("Yay!") to cool ("Too easy for you.") so it never gets stale —
+///   and it throws in Nepali praise (स्याबास! = "well done!") when the
+///   phone has a Nepali voice installed.
+/// - `stopSpeaking(at: .immediate)` cuts off the previous cheer: if the
+///   kid is on a roll answering fast, cheers never pile up and talk over
+///   each other.
+/// - The synthesizer lives in a `static let` so nothing throws it away
+///   mid-sentence — same keep-alive lesson as the AVPlayer in @State.
 /// - `UINotificationFeedbackGenerator` = the iPhone success buzz. One
 ///   line, and it's the Apple-approved way to say "you did it!"
 enum WinFanfare {
-    /// Holds the engine while a chime plays so nothing throws it away
-    /// mid-note — same reason the AVPlayer lives in @State elsewhere.
-    private static var engineHolder: AVAudioEngine?
+    /// One synthesizer for the whole app, kept alive forever.
+    private static let synth = AVSpeechSynthesizer()
 
-    static func play() {
-        // Haptic stays on the main thread — we're already on it, since this
-        // runs straight from a button tap.
-        UINotificationFeedbackGenerator().notificationOccurred(.success)
-
-        // The audio engine shakes hands with real audio hardware when it
-        // starts, and on the simulator that handshake can stall. So it runs
-        // OFF the main thread: the main thread is the UI thread, and if it
-        // ever waits on hardware, the whole app freezes. Worst case now the
-        // chime just doesn't play — the app stays alive.
-        DispatchQueue.global(qos: .userInitiated).async {
-            let engine = AVAudioEngine()
-            engineHolder = engine
-            let player = AVAudioPlayerNode()
-            engine.attach(player)
-
-            // THE FIX for the scheduleBuffer crash: that call has a hard
-            // rule — the buffer's format must match the player's output
-            // format EXACTLY. We used to synthesize 44.1 kHz mono while
-            // connecting with format:nil, letting the graph negotiate
-            // whatever the hardware wants (the simulator's Mac audio is
-            // typically 48 kHz). Mismatch = crash, right on the
-            // scheduleBuffer line — exactly where Xcode pointed.
-            // Now we ask the hardware what it speaks, connect with that
-            // explicit format, and synthesize our notes to match it.
-            let hardware = engine.outputNode.outputFormat(forBus: 0)
-            guard let format = AVAudioFormat(standardFormatWithSampleRate: hardware.sampleRate,
-                                             channels: hardware.channelCount) else {
-                if engineHolder === engine { engineHolder = nil }
-                return
-            }
-            engine.connect(player, to: engine.mainMixerNode, format: format)
-
-            do {
-                try engine.start()
-            } catch {
-                if engineHolder === engine { engineHolder = nil }
-                return
-            }
-            player.play()
-
-            // C5 -> E5 -> G5, each 0.12s apart: a rising major arpeggio.
-            for (i, freq) in [523.25, 659.25, 783.99].enumerated() {
-                DispatchQueue.main.asyncAfter(deadline: .now() + Double(i) * 0.12) {
-                    player.scheduleBuffer(toneBuffer(frequency: freq, format: format), completionHandler: nil)
-                }
-            }
-
-            // Clean up after the last note rings out.
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
-                engine.stop()
-                if engineHolder === engine { engineHolder = nil }
-            }
+    /// The celebration pool: (words, language code). Nepali lines join
+    /// only if a Nepali voice exists — otherwise an English voice would
+    /// mangle the pronunciation.
+    private static var cheers: [(text: String, language: String)] {
+        var lines: [(text: String, language: String)] = [
+            ("Yay!", "en-US"),
+            ("Amazing!", "en-US"),
+            ("You nailed it!", "en-US"),
+            ("Brilliant!", "en-US"),
+            ("Let's go!", "en-US"),
+            ("Too easy for you.", "en-US"),
+            ("That's how it's done!", "en-US"),
+        ]
+        if AVSpeechSynthesisVoice(language: "ne-NP") != nil {
+            lines += [("स्याबास!", "ne-NP"),   // "Well done!"
+                      ("राम्रो!", "ne-NP")]     // "Nice!"
         }
+        return lines
     }
 
-    /// One note: 0.18 seconds of sine wave with a fade-out envelope,
-    /// synthesized in the hardware's own format (see play()).
-    private static func toneBuffer(frequency: Double, format: AVAudioFormat) -> AVAudioPCMBuffer {
-        let sampleRate = format.sampleRate
-        let frames = AVAudioFrameCount(sampleRate * 0.18)
-        let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frames)!
-        buffer.frameLength = frames
-        for ch in 0..<Int(format.channelCount) {
-            let data = buffer.floatChannelData![ch]
-            for i in 0..<Int(frames) {
-                let t = Double(i) / sampleRate
-                let envelope = 1.0 - Double(i) / Double(frames)
-                data[i] = Float(sin(2 * .pi * frequency * t) * envelope * 0.4)
-            }
-        }
-        return buffer
+    static func play() {
+        // Haptic + voice both run from the button tap on the main thread.
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
+
+        synth.stopSpeaking(at: .immediate)
+        guard let cheer = cheers.randomElement() else { return }
+        let utterance = AVSpeechUtterance(string: cheer.text)
+        utterance.voice = AVSpeechSynthesisVoice(language: cheer.language)
+        utterance.rate = 0.52            // a touch peppier than default
+        utterance.pitchMultiplier = 1.15 // a touch more excited
+        synth.speak(utterance)
     }
 }
 
