@@ -177,6 +177,7 @@ struct MissionDetailView: View {
     @State private var player: AVPlayer?
     @AppStorage("ghar.xp.total") private var totalXP = 0
     @AppStorage("ghar.missions.completed") private var completedData = Data()
+    @AppStorage("ghar.last.win") private var lastWin = ""
     @State private var showConfetti = false
 
     private var completedIDs: Set<String> {
@@ -198,6 +199,7 @@ struct MissionDetailView: View {
             // The win moment: voice cheer + confetti. (Un-completing stays quiet.)
             WinFanfare.play()
             celebrate()
+            lastWin = mission.titleEn
         }
         completedData = (try? JSONEncoder().encode(ids)) ?? Data()
     }
@@ -301,6 +303,7 @@ struct QuizView: View {
     let words: [Word]
     @State private var player: AVPlayer?
     @AppStorage("ghar.xp.total") private var totalXP = 0
+    @AppStorage("ghar.last.win") private var lastWin = ""
 
     @State private var current: Word?
     @State private var options: [Word] = []
@@ -385,6 +388,7 @@ struct QuizView: View {
             // The win moment: voice cheer + confetti.
             WinFanfare.play()
             celebrate()
+            lastWin = "Quiz: \(option.english)"
         } else {
             wrongIDs.insert(option.id)
         }
@@ -535,25 +539,57 @@ enum WinFanfare {
     }
 }
 
-/// The My Ghar tab: your house, built from your XP. The roof and walls
-/// are always there; every decoration unlocks at an XP threshold — locked
-/// ones show as grey silhouettes so the kid sees what's coming.
+/// The My Ghar tab: your house, built from your XP — now a little alive.
+/// Name it, paint it, poke the decorations, and watch clouds drift by.
+/// The roof and walls are always there; every decoration unlocks at an XP
+/// threshold — locked ones show as grey silhouettes so the kid sees what's
+/// coming.
 ///
 /// Teaching notes:
-/// - Still zero image assets: the whole house is shapes (triangles,
-///   rounded rectangles, circles, ellipses).
+/// - Still zero image assets: sky, sun, clouds, and the whole house are
+///   shapes (circles, triangles, rounded rectangles).
 /// - Everything keys off the same "ghar.xp.total" locker. Earn XP in
 ///   the quiz or missions, the house builds itself. One source of truth.
-/// - Positions inside the house body use `.offset(x:y)` — points from the
-///   center. Simple to reason about, easy to nudge.
+/// - Personalization (name, paint) lives in @AppStorage too — on-device,
+///   no login, COPPA-safe, survives app restarts.
+/// - The "poke" pattern: each decoration owns one Bool. Tap flips it on
+///   with a spring animation, then a short timer flips it back. Same
+///   self-dismissing idea as the confetti — and like the confetti fix,
+///   it always resets through the helper so it can't get stuck.
+/// - DriftingCloud animates itself: `repeatForever(autoreverses: true)`
+///   on a linear animation = endless gentle motion with no timer at all.
 struct MyGharView: View {
     @AppStorage("ghar.xp.total") private var totalXP = 0
+    @AppStorage("ghar.house.name") private var houseName = ""
+    @AppStorage("ghar.house.roof") private var roofChoice = 0
+    @AppStorage("ghar.house.walls") private var wallChoice = 0
+    @AppStorage("ghar.last.win") private var lastWin = ""
 
-    private let diyoAt = 10
-    private let windowsAt = 25
-    private let doorAt = 50
-    private let flagsAt = 75
-    private let buddyAt = 100
+    // Poke-state: one Bool per decoration. Tap -> true (spring!) -> timer -> false.
+    @State private var diyoPop = false
+    @State private var buddyPop = false
+    @State private var flagsPop = false
+    @State private var doorPop = false
+
+    // Early, fast rewards: the very first correct quiz answer lights the diyo.
+    private let diyoAt = 5
+    private let windowsAt = 15
+    private let doorAt = 30
+    private let flagsAt = 50
+    private let buddyAt = 80
+
+    private let roofColors: [(name: String, color: Color)] = [
+        ("Crimson", Color(red: 0.75, green: 0.15, blue: 0.2)),
+        ("Teal", Color(red: 0.16, green: 0.5, blue: 0.45)),
+        ("Marigold", Color(red: 0.95, green: 0.55, blue: 0.15)),
+        ("Himal", Color(red: 0.2, green: 0.3, blue: 0.6)),
+    ]
+    private let wallColors: [(name: String, color: Color)] = [
+        ("Cream", Color(red: 1.0, green: 0.96, blue: 0.88)),
+        ("Peach", Color(red: 1.0, green: 0.9, blue: 0.8)),
+        ("Mint", Color(red: 0.88, green: 0.95, blue: 0.9)),
+        ("Sand", Color(red: 0.93, green: 0.87, blue: 0.76)),
+    ]
 
     private let flagColors: [Color] = [.blue, .orange, .red, .green, .yellow]
 
@@ -572,52 +608,106 @@ struct MyGharView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 16) {
-                Text("⭐ \(totalXP) XP")
+                // The nameplate: whatever the kid named their ghar.
+                Text(houseName.isEmpty ? "My Ghar" : "\(houseName)'s Ghar")
                     .font(.title)
                     .bold()
 
-                // The house itself — stacked with zero spacing so the
-                // flags sit on the roof and the roof sits on the walls.
-                VStack(spacing: 0) {
-                    // Prayer flags fly above the roof
-                    HStack(spacing: 6) {
-                        ForEach(0..<7, id: \.self) { i in
-                            Triangle()
-                                .fill(totalXP >= flagsAt ? flagColors[i % flagColors.count] : .gray.opacity(0.25))
-                                .frame(width: 24, height: 20)
-                        }
-                    }
-                    .padding(.bottom, 4)
+                Text("⭐ \(totalXP) XP")
+                    .font(.headline)
 
-                    // Roof — crimson, like the app icon
-                    Triangle()
-                        .fill(Color(red: 0.75, green: 0.15, blue: 0.2))
-                        .frame(width: 250, height: 110)
-
-                    // Body — cream walls, decorations positioned inside
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 10)
-                            .fill(Color(red: 1.0, green: 0.96, blue: 0.88))
-                            .frame(width: 210, height: 170)
-                            .shadow(radius: 3)
-
-                        HStack(spacing: 70) {
-                            window
-                            window
-                        }
-                        .offset(y: -40)
-
-                        RoundedRectangle(cornerRadius: 6)
-                            .fill(totalXP >= doorAt ? .brown : .gray.opacity(0.25))
-                            .frame(width: 54, height: 84)
-                            .offset(y: 38)
-
-                        diyo.offset(x: -72, y: 48)
-                        buddy.offset(x: 72, y: 42)
-                    }
+                // Latest win banner: ties the house to what the kid just did.
+                if !lastWin.isEmpty {
+                    Text("🎉 Latest win: \(lastWin)")
+                        .font(.subheadline)
+                        .bold()
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(.yellow.opacity(0.25))
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
                 }
 
-                // Collection shelf
+                // The house scene: sky, sun, drifting clouds, then the house.
+                ZStack {
+                    RoundedRectangle(cornerRadius: 16)
+                        .fill(LinearGradient(
+                            colors: [.blue.opacity(0.3), .blue.opacity(0.05)],
+                            startPoint: .top, endPoint: .bottom))
+                        .frame(width: 310, height: 400)
+
+                    Circle()
+                        .fill(.yellow.opacity(0.9))
+                        .frame(width: 46, height: 46)
+                        .offset(x: -110, y: -155)
+
+                    DriftingCloud(startX: 70, y: -145)
+                    DriftingCloud(startX: -50, y: -105)
+
+                    VStack(spacing: 0) {
+                        // Prayer flags fly above the roof — tap to make them dance.
+                        HStack(spacing: 6) {
+                            ForEach(0..<7, id: \.self) { i in
+                                Triangle()
+                                    .fill(totalXP >= flagsAt ? flagColors[i % flagColors.count] : .gray.opacity(0.25))
+                                    .frame(width: 24, height: 20)
+                            }
+                        }
+                        .rotationEffect(.degrees(flagsPop ? 10 : -10))
+                        .onTapGesture { if totalXP >= flagsAt { poke { flagsPop = $0 } } }
+                        .padding(.bottom, 4)
+
+                        // Roof — painted whatever color the kid picked.
+                        Triangle()
+                            .fill(roofColors[roofChoice % roofColors.count].color)
+                            .frame(width: 250, height: 110)
+
+                        // Body — painted walls, decorations positioned inside.
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 10)
+                                .fill(wallColors[wallChoice % wallColors.count].color)
+                                .frame(width: 210, height: 170)
+                                .shadow(radius: 3)
+
+                            HStack(spacing: 70) {
+                                window
+                                window
+                            }
+                            .offset(y: -40)
+
+                            // Door — tap to knock (it swings on its hinge).
+                            RoundedRectangle(cornerRadius: 6)
+                                .fill(totalXP >= doorAt ? .brown : .gray.opacity(0.25))
+                                .frame(width: 54, height: 84)
+                                .rotationEffect(.degrees(doorPop ? -14 : 0), anchor: .leading)
+                                .onTapGesture { if totalXP >= doorAt { poke { doorPop = $0 } } }
+                                .offset(y: 38)
+
+                            diyo
+                                .offset(x: -72, y: 48)
+                                .scaleEffect(diyoPop ? 1.35 : 1.0)
+                                .onTapGesture { if totalXP >= diyoAt { poke { diyoPop = $0 } } }
+
+                            buddy
+                                .offset(x: 72, y: 42 + (buddyPop ? -16 : 0))
+                                .onTapGesture { if totalXP >= buddyAt { poke { buddyPop = $0 } } }
+                        }
+                    }
+                    .offset(y: 40)
+                }
+
+                // Name your ghar.
+                TextField("Name your ghar…", text: $houseName)
+                    .textFieldStyle(.roundedBorder)
+                    .padding(.horizontal, 40)
+
+                // Paint shop: pick roof + wall colors.
+                VStack(spacing: 10) {
+                    paintRow(label: "Roof", choices: roofColors, selected: $roofChoice)
+                    paintRow(label: "Walls", choices: wallColors, selected: $wallChoice)
+                }
+                .padding(.horizontal)
+
+                // Collection shelf.
                 VStack(alignment: .leading, spacing: 10) {
                     ForEach(decorations, id: \.name) { d in
                         HStack {
@@ -639,8 +729,51 @@ struct MyGharView: View {
                 .background(.gray.opacity(0.1))
                 .clipShape(RoundedRectangle(cornerRadius: 12))
                 .padding(.horizontal)
+
+                Text("Tap the decorations — they like it. 👆")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
             .padding(.vertical)
+        }
+    }
+
+    /// One paint row: a label plus tappable color swatches. The selected
+    /// swatch gets a ring; the choice is stored in @AppStorage.
+    private func paintRow(label: String,
+                          choices: [(name: String, color: Color)],
+                          selected: Binding<Int>) -> some View {
+        HStack {
+            Text(label)
+                .font(.subheadline)
+                .frame(width: 44, alignment: .leading)
+            ForEach(0..<choices.count, id: \.self) { i in
+                Circle()
+                    .fill(choices[i].color)
+                    .frame(width: 34, height: 34)
+                    .overlay {
+                        if selected.wrappedValue == i {
+                            Circle().stroke(.primary, lineWidth: 2.5)
+                        }
+                    }
+                    .onTapGesture {
+                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                        selected.wrappedValue = i
+                    }
+                    .accessibilityLabel(choices[i].name)
+            }
+            Spacer()
+        }
+    }
+
+    /// The "poke" pattern: pop a decoration with a spring, then settle it
+    /// back after a beat. The Bool arrives as a setter closure so one
+    /// helper serves all four decorations.
+    private func poke(_ set: @escaping (Bool) -> Void) {
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.35)) { set(true) }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+            withAnimation(.spring(response: 0.4, dampingFraction: 0.6)) { set(false) }
         }
     }
 
@@ -652,10 +785,11 @@ struct MyGharView: View {
     }
 
     /// A diyo (oil lamp): clay base with a flame, or grey when locked.
+    /// Popping it scales the whole lamp up — the flame looks like it flares.
     private var diyo: some View {
         VStack(spacing: 1) {
             Circle()
-                .fill(totalXP >= diyoAt ? .orange : .gray.opacity(0.25))
+                .fill(totalXP >= diyoAt ? (diyoPop ? .yellow : .orange) : .gray.opacity(0.25))
                 .frame(width: 14, height: 14)
             Ellipse()
                 .fill(totalXP >= diyoAt ? .brown : .gray.opacity(0.25))
@@ -663,7 +797,8 @@ struct MyGharView: View {
         }
     }
 
-    /// The buddy: a little round friend who moves in at 100 XP.
+    /// The buddy: a little round friend who moves in at 80 XP.
+    /// Popping it makes it hop.
     private var buddy: some View {
         ZStack {
             Circle()
@@ -675,6 +810,30 @@ struct MyGharView: View {
                     Circle().fill(.black).frame(width: 5, height: 5)
                 }
                 .offset(y: -4)
+            }
+        }
+    }
+}
+
+/// A cloud that drifts side to side forever, all by itself.
+/// `repeatForever(autoreverses: true)` on a linear animation = endless
+/// gentle motion with no timer and nothing to get stuck.
+struct DriftingCloud: View {
+    let startX: CGFloat
+    let y: CGFloat
+    @State private var drifted = false
+
+    var body: some View {
+        HStack(spacing: -14) {
+            Circle().fill(.white).frame(width: 42, height: 42)
+            Circle().fill(.white).frame(width: 58, height: 58)
+            Circle().fill(.white).frame(width: 42, height: 42)
+        }
+        .shadow(color: .black.opacity(0.08), radius: 4)
+        .offset(x: startX + (drifted ? 36 : -36), y: y)
+        .onAppear {
+            withAnimation(.linear(duration: 8).repeatForever(autoreverses: true)) {
+                drifted = true
             }
         }
     }
