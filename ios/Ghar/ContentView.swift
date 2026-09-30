@@ -939,17 +939,61 @@ struct DeusiArt: View {
     }
 }
 
-// Sel Roti: the golden ring frying in the pan, bubbles rising.
+// Sel Roti: the golden, crispy ring frying in the pan, bubbles rising.
+// Real sel roti isn't a perfect ring — it's lumpy and hand-piped, deep
+// golden-brown with darker crispy edges, like a thick uneven rope of dough.
 struct SelRotiArt: View {
     @State private var fry = false
 
+    // Crispy spots scattered around the ring band (hand-placed).
+    private let spots: [(x: CGFloat, y: CGFloat, s: CGFloat, dark: Bool)] = [
+        (43, 0, 10, true), (-43, 3, 9, true), (3, -43, 11, false), (-5, 43, 9, true),
+        (30, 31, 8, false), (-31, 30, 10, true), (31, -30, 9, true), (-30, -31, 8, false),
+        (15, -40, 7, true), (-18, 39, 7, false),
+    ]
+
     var body: some View {
         ZStack {
+            // The pan.
             Ellipse().fill(Color(white: 0.2)).frame(width: 190, height: 60).offset(y: 40)
-            Circle()
-                .stroke(Color(red: 0.75, green: 0.5, blue: 0.2), lineWidth: 26)
-                .frame(width: 90, height: 90)
-                .scaleEffect(fry ? 1.06 : 1.0)
+            // The sel roti itself.
+            ZStack {
+                // Dark crispy underside, peeking out around the edges.
+                Circle()
+                    .stroke(Color(red: 0.42, green: 0.24, blue: 0.1), lineWidth: 46)
+                    .frame(width: 84, height: 84)
+                // Golden body of the ring.
+                Circle()
+                    .stroke(
+                        LinearGradient(
+                            colors: [Color(red: 0.88, green: 0.62, blue: 0.3),
+                                     Color(red: 0.72, green: 0.47, blue: 0.2),
+                                     Color(red: 0.84, green: 0.58, blue: 0.27)],
+                            startPoint: .topLeading, endPoint: .bottomTrailing),
+                        lineWidth: 36)
+                    .frame(width: 84, height: 84)
+                // Lumps: hand-piped bulges that break the perfect circle.
+                Circle().fill(Color(red: 0.8, green: 0.55, blue: 0.26))
+                    .frame(width: 36, height: 32).offset(x: -40, y: -20)
+                Circle().fill(Color(red: 0.74, green: 0.5, blue: 0.22))
+                    .frame(width: 32, height: 34).offset(x: 38, y: 20)
+                Circle().fill(Color(red: 0.7, green: 0.46, blue: 0.2))
+                    .frame(width: 30, height: 28).offset(x: 4, y: 42)
+                Circle().fill(Color(red: 0.82, green: 0.57, blue: 0.28))
+                    .frame(width: 28, height: 30).offset(x: -12, y: -40)
+                // Crispy + golden spots for the fried texture.
+                ForEach(0..<spots.count, id: \.self) { i in
+                    let sp = spots[i]
+                    Circle()
+                        .fill(sp.dark ? Color(red: 0.5, green: 0.3, blue: 0.13)
+                                      : Color(red: 0.93, green: 0.7, blue: 0.38))
+                        .frame(width: sp.s, height: sp.s)
+                        .offset(x: sp.x, y: sp.y)
+                        .opacity(0.85)
+                }
+            }
+            .scaleEffect(fry ? 1.06 : 1.0)
+            // Bubbles rising through the hot oil.
             ForEach(0..<4) { i in
                 Circle()
                     .fill(.white.opacity(0.6))
