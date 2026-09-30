@@ -197,9 +197,20 @@ struct MissionDetailView: View {
             totalXP += mission.xp
             // The win moment: voice cheer + confetti. (Un-completing stays quiet.)
             WinFanfare.play()
-            showConfetti = true
+            celebrate()
         }
         completedData = (try? JSONEncoder().encode(ids)) ?? Data()
+    }
+
+    /// Fire the confetti so it can never get "stuck": drop any in-flight
+    /// burst first, then raise a fresh one on the next runloop turn.
+    /// (The burst dismisses itself with a 1.2s `.task` timer — but `.task`
+    /// dies with the view. Tap "I did it!", hit Back before 1.2s, and the
+    /// timer is cancelled with the flag still on, swallowing every future
+    /// celebration. Reset-first makes that impossible.)
+    private func celebrate() {
+        showConfetti = false
+        DispatchQueue.main.async { showConfetti = true }
     }
 
     var body: some View {
@@ -373,10 +384,17 @@ struct QuizView: View {
             totalXP += 5
             // The win moment: voice cheer + confetti.
             WinFanfare.play()
-            showConfetti = true
+            celebrate()
         } else {
             wrongIDs.insert(option.id)
         }
+    }
+
+    /// Same stuck-proof re-trigger as MissionDetailView: drop any in-flight
+    /// burst first, then raise a fresh one on the next runloop turn.
+    private func celebrate() {
+        showConfetti = false
+        DispatchQueue.main.async { showConfetti = true }
     }
 
     /// Button colors, derived from state: right answer goes green,
