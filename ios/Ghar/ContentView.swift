@@ -170,8 +170,6 @@ struct MissionsView: View {
 ///   tapping twice can't double-count.
 /// - The play button reuses the AVPlayer trick from DeckView: the player
 ///   lives in @State so SwiftUI doesn't throw it away mid-sound.
-/// - The win moment (chime + confetti) fires only when COMPLETING, not
-///   when un-completing. Small detail, big feel.
 struct MissionDetailView: View {
     let mission: Mission
     @State private var player: AVPlayer?
@@ -363,10 +361,14 @@ struct QuizView: View {
     /// Fresh question: a random word (never the same twice in a row),
     /// plus up to 3 random distractors, all shuffled. Auto-plays the word.
     private func newQuestion() {
-        let pool = words.filter { $0.id != current?.id }
+        // Only words with recorded audio can be quiz questions —
+        // a listening game with nothing to hear isn't a game.
+        // `?? true`: packs from before `has_audio` existed count as audible.
+        let audible = words.filter { $0.hasAudio ?? true }
+        let pool = audible.filter { $0.id != current?.id }
         guard let next = pool.randomElement() else { return }
         current = next
-        let distractors = words.filter { $0.id != next.id }.shuffled().prefix(3)
+        let distractors = audible.filter { $0.id != next.id }.shuffled().prefix(3)
         options = ([next] + distractors).shuffled()
         solved = false
         wrongIDs = []
@@ -553,8 +555,9 @@ enum WinFanfare {
 /// - Owned decorations live in @AppStorage as a JSON-encoded Set<String>
 ///   — the same packing trick as completed missions. On-device, no login,
 ///   COPPA-safe, survives restarts.
-/// - Tap-to-speak uses NepaliSpeaker (AVSpeechSynthesizer, ne-NP voice):
-///   real spoken Nepali with zero audio files to record.
+/// - Tap-to-speak uses NepaliSpeaker (AVSpeechSynthesizer): the real
+///   Nepali voice when the device has one, otherwise the romanized word
+///   via the English voice — zero audio files to record either way.
 /// - The "poke" pattern from before is still here — now each tap both
 ///   speaks the Nepali name AND pops the decoration.
 struct MyGharView: View {
@@ -565,22 +568,24 @@ struct MyGharView: View {
     @AppStorage("ghar.last.win") private var lastWin = ""
     @AppStorage("ghar.shop.owned") private var ownedData = Data()
 
-    // Poke-state: one Bool per decoration. Tap -> true (spring!) -> timer -> false.
+    // Poke-state: one Bool per tappable thing. Tap -> true (spring!) -> timer -> false.
     @State private var diyoPop = false
     @State private var buddyPop = false
     @State private var flagsPop = false
     @State private var doorPop = false
     @State private var windowsPop = false
+    @State private var sunPop = false
+    @State private var roofPop = false
 
     // The shop: spend XP to add decorations — nothing is auto-added.
     // Prices are tuned so the first quiz win (5 XP) buys the diyo,
     // and the buddy (80 XP) is a real savings goal.
     private let shopItems: [ShopItem] = [
-        ShopItem(id: "diyo", nameEn: "Diyo lamp", nameNe: "दियो", icon: "🪔", cost: 5),
-        ShopItem(id: "windows", nameEn: "Windows", nameNe: "झ्याल", icon: "🪟", cost: 15),
-        ShopItem(id: "door", nameEn: "Door", nameNe: "ढोका", icon: "🚪", cost: 30),
-        ShopItem(id: "flags", nameEn: "Prayer flags", nameNe: "प्रार्थना झण्डा", icon: "🚩", cost: 50),
-        ShopItem(id: "buddy", nameEn: "Buddy", nameNe: "साथी", icon: "😊", cost: 80),
+        ShopItem(id: "diyo", nameEn: "Diyo lamp", nameNe: "दियो", romanized: "diyo", icon: "🪔", cost: 5),
+        ShopItem(id: "windows", nameEn: "Windows", nameNe: "झ्याल", romanized: "jhyaal", icon: "🪟", cost: 15),
+        ShopItem(id: "door", nameEn: "Door", nameNe: "ढोका", romanized: "dhoka", icon: "🚪", cost: 30),
+        ShopItem(id: "flags", nameEn: "Prayer flags", nameNe: "प्रार्थना झण्डा", romanized: "prarthana jhanda", icon: "🚩", cost: 50),
+        ShopItem(id: "buddy", nameEn: "Buddy", nameNe: "साथी", romanized: "saathi", icon: "😊", cost: 80),
     ]
 
     /// IDs of purchased decorations, decoded from storage.
@@ -588,9 +593,9 @@ struct MyGharView: View {
         (try? JSONDecoder().decode(Set<String>.self, from: ownedData)) ?? []
     }
 
-    /// The Nepali name for a decoration id — what gets spoken on tap.
-    private func nepaliName(for id: String) -> String {
-        shopItems.first { $0.id == id }?.nameNe ?? id
+    /// The shop item for a decoration id — what gets spoken on tap.
+    private func shopItem(_ id: String) -> ShopItem {
+        shopItems.first { $0.id == id } ?? shopItems[0]
     }
 
     private let roofColors: [(name: String, color: Color)] = [
@@ -642,6 +647,11 @@ struct MyGharView: View {
                         .fill(.yellow.opacity(0.9))
                         .frame(width: 46, height: 46)
                         .offset(x: -110, y: -155)
+                        .scaleEffect(sunPop ? 1.25 : 1.0)
+                        .onTapGesture {
+                            NepaliSpeaker.say(nepali: "सूर्य", romanized: "surya")
+                            poke { sunPop = $0 }
+                        }
 
                     DriftingCloud(startX: 70, y: -145)
                     DriftingCloud(startX: -50, y: -105)
@@ -658,16 +668,21 @@ struct MyGharView: View {
                         .rotationEffect(.degrees(flagsPop ? 10 : -10))
                         .onTapGesture {
                             if ownedIDs.contains("flags") {
-                                NepaliSpeaker.say(nepaliName(for: "flags"))
+                                NepaliSpeaker.say(shopItem("flags"))
                                 poke { flagsPop = $0 }
                             }
                         }
                         .padding(.bottom, 4)
 
-                        // Roof — painted whatever color the kid picked.
+                        // Roof — painted whatever color the kid picked. Tap to hear its name.
                         Triangle()
                             .fill(roofColors[roofChoice % roofColors.count].color)
                             .frame(width: 250, height: 110)
+                            .scaleEffect(roofPop ? 1.05 : 1.0)
+                            .onTapGesture {
+                                NepaliSpeaker.say(nepali: "छाना", romanized: "chhana")
+                                poke { roofPop = $0 }
+                            }
 
                         // Body — painted walls, decorations positioned inside.
                         ZStack {
@@ -684,7 +699,7 @@ struct MyGharView: View {
                             .scaleEffect(windowsPop ? 1.15 : 1.0)
                             .onTapGesture {
                                 if ownedIDs.contains("windows") {
-                                    NepaliSpeaker.say(nepaliName(for: "windows"))
+                                    NepaliSpeaker.say(shopItem("windows"))
                                     poke { windowsPop = $0 }
                                 }
                             }
@@ -696,7 +711,7 @@ struct MyGharView: View {
                                 .rotationEffect(.degrees(doorPop ? -14 : 0), anchor: .leading)
                                 .onTapGesture {
                                     if ownedIDs.contains("door") {
-                                        NepaliSpeaker.say(nepaliName(for: "door"))
+                                        NepaliSpeaker.say(shopItem("door"))
                                         poke { doorPop = $0 }
                                     }
                                 }
@@ -707,7 +722,7 @@ struct MyGharView: View {
                                 .scaleEffect(diyoPop ? 1.35 : 1.0)
                                 .onTapGesture {
                                     if ownedIDs.contains("diyo") {
-                                        NepaliSpeaker.say(nepaliName(for: "diyo"))
+                                        NepaliSpeaker.say(shopItem("diyo"))
                                         poke { diyoPop = $0 }
                                     }
                                 }
@@ -716,7 +731,7 @@ struct MyGharView: View {
                                 .offset(x: 72, y: 42 + (buddyPop ? -16 : 0))
                                 .onTapGesture {
                                     if ownedIDs.contains("buddy") {
-                                        NepaliSpeaker.say(nepaliName(for: "buddy"))
+                                        NepaliSpeaker.say(shopItem("buddy"))
                                         poke { buddyPop = $0 }
                                     }
                                 }
@@ -746,9 +761,9 @@ struct MyGharView: View {
                             Text(item.icon).font(.title2)
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(item.nameNe).font(.headline)
-                                Text(item.nameEn).font(.caption).foregroundStyle(.secondary)
+                                Text("\(item.romanized) · \(item.nameEn)").font(.caption).foregroundStyle(.secondary)
                             }
-                            Button(action: { NepaliSpeaker.say(item.nameNe) }) {
+                            Button(action: { NepaliSpeaker.say(item) }) {
                                 Image(systemName: "speaker.wave.2.fill")
                             }
                             .buttonStyle(.bordered)
@@ -773,7 +788,7 @@ struct MyGharView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 12))
                 .padding(.horizontal)
 
-                Text("Tap a decoration to hear its Nepali name 🗣️")
+                Text("Tap the sun, clouds, roof, or a decoration to hear its Nepali name 🗣️")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -791,7 +806,7 @@ struct MyGharView: View {
         ids.insert(item.id)
         ownedData = (try? JSONEncoder().encode(ids)) ?? Data()
         UINotificationFeedbackGenerator().notificationOccurred(.success)
-        NepaliSpeaker.say(item.nameNe)
+        NepaliSpeaker.say(item)
     }
 
     /// One paint row: a label plus tappable color swatches. The selected
@@ -878,6 +893,7 @@ struct DriftingCloud: View {
     let startX: CGFloat
     let y: CGFloat
     @State private var drifted = false
+    @State private var popped = false
 
     var body: some View {
         HStack(spacing: -14) {
@@ -887,6 +903,15 @@ struct DriftingCloud: View {
         }
         .shadow(color: .black.opacity(0.08), radius: 4)
         .offset(x: startX + (drifted ? 36 : -36), y: y)
+        .scaleEffect(popped ? 1.15 : 1.0)
+        .onTapGesture {
+            NepaliSpeaker.say(nepali: "बादल", romanized: "baadal")
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.35)) { popped = true }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                withAnimation(.spring(response: 0.4, dampingFraction: 0.6)) { popped = false }
+            }
+        }
         .onAppear {
             withAnimation(.linear(duration: 8).repeatForever(autoreverses: true)) {
                 drifted = true
@@ -901,13 +926,17 @@ struct ShopItem: Identifiable {
     let id: String
     let nameEn: String
     let nameNe: String
+    let romanized: String
     let icon: String
     let cost: Int
 }
 
-/// Says a Nepali word out loud with the phone's own Nepali voice —
-/// no recordings needed. Prefers a real Nepali (ne-NP) voice; if none
-/// is installed it falls back to the default voice, which does its best.
+/// Says a decoration's Nepali name out loud — no recordings needed.
+/// If the device has a real Nepali (ne-NP) voice installed, it speaks the
+/// Devanagari word properly. Otherwise (like on the simulator, which has no
+/// Nepali voice) it says the romanized spelling with the English voice —
+/// an accent, but always audible. An English voice handed Devanagari text
+/// just goes silent, so the romanized fallback is what keeps it working.
 /// (On a real iPhone: Settings → Accessibility → Spoken Content → Voices
 ///  to download the Nepali voice for perfect pronunciation.)
 ///
@@ -921,10 +950,21 @@ struct ShopItem: Identifiable {
 enum NepaliSpeaker {
     private static let synth = AVSpeechSynthesizer()
 
-    static func say(_ nepali: String) {
+    static func say(_ item: ShopItem) {
+        say(nepali: item.nameNe, romanized: item.romanized)
+    }
+
+    /// Scene words (sun, roof, clouds) that aren't shop items.
+    static func say(nepali: String, romanized: String) {
         synth.stopSpeaking(at: .immediate)
-        let utterance = AVSpeechUtterance(string: nepali)
-        utterance.voice = AVSpeechSynthesisVoice(language: "ne-NP") // nil → default voice
+        let utterance: AVSpeechUtterance
+        if let nepaliVoice = AVSpeechSynthesisVoice(language: "ne-NP") {
+            utterance = AVSpeechUtterance(string: nepali)
+            utterance.voice = nepaliVoice
+        } else {
+            utterance = AVSpeechUtterance(string: romanized)
+            utterance.voice = AVSpeechSynthesisVoice(language: "en-US")
+        }
         utterance.rate = 0.45
         synth.speak(utterance)
     }
@@ -943,28 +983,32 @@ struct DeckView: View {
     let deck: Deck
     @State private var player: AVPlayer?
 
+    /// Words grouped under their `section` header, in file order.
+    /// (`section` is how Vowels and Consonants live inside one Alphabets deck.)
+    /// Words with no section share one headerless group.
+    var grouped: [(header: String?, words: [Word])] {
+        var groups: [(header: String?, words: [Word])] = []
+        for word in deck.words {
+            if groups.last?.header == word.section {
+                groups[groups.count - 1].words.append(word)
+            } else {
+                groups.append((word.section, [word]))
+            }
+        }
+        return groups
+    }
+
     var body: some View {
-        List(deck.words) { word in
-            HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(word.devanagari)
-                        .font(.largeTitle)
-                    Text("\(word.romanized) — \(word.english)")
-                        .foregroundStyle(.secondary)
-                    if let example = word.exampleSentenceNp {
-                        Text("“\(example)”")
-                            .font(.caption)
-                            .italic()
+        List {
+            ForEach(grouped.indices, id: \.self) { i in
+                Section(header: grouped[i].header.map {
+                    Text($0).font(.headline)
+                }) {
+                    ForEach(grouped[i].words) { word in
+                        WordRow(word: word, onPlay: play(word:))
                     }
                 }
-                Spacer()
-                Button(action: { play(word: word) }) {
-                    Image(systemName: "speaker.wave.2.fill")
-                        .font(.title2)
-                }
-                .buttonStyle(.bordered)
             }
-            .padding(.vertical, 4)
         }
         .navigationTitle(deck.title)
     }
@@ -976,6 +1020,56 @@ struct DeckView: View {
         guard let url = URL(string: GharAPI.baseURLString + word.audioUrl) else { return }
         player = AVPlayer(url: url)
         player?.play()
+    }
+}
+
+/// One row in a deck: optional animal photo, the word, and its speaker button.
+struct WordRow: View {
+    let word: Word
+    let onPlay: (Word) -> Void
+
+    var body: some View {
+        HStack {
+            // Real photo for the animals deck, served by the backend:
+            // server address + image path from the JSON
+            //   http://localhost:8000 + /images/nepal-v1/anim_kukur.jpg
+            if let imagePath = word.image, imagePath.hasPrefix("/") {
+                AsyncImage(url: URL(string: GharAPI.baseURLString + imagePath)) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image.resizable().scaledToFill()
+                    case .failure, .empty:
+                        Color.clear
+                    @unknown default:
+                        Color.clear
+                    }
+                }
+                .frame(width: 64, height: 64)
+                .clipShape(RoundedRectangle(cornerRadius: 14))
+            }
+            VStack(alignment: .leading, spacing: 4) {
+                Text(word.devanagari)
+                    .font(.largeTitle)
+                Text("\(word.romanized) — \(word.english)")
+                    .foregroundStyle(.secondary)
+                if let example = word.exampleSentenceNp {
+                    Text("“\(example)”")
+                        .font(.caption)
+                        .italic()
+                }
+            }
+            Spacer()
+            Button(action: { onPlay(word) }) {
+                Image(systemName: "speaker.wave.2.fill")
+                    .font(.title2)
+            }
+            .buttonStyle(.bordered)
+            // No recording yet → dimmed and disabled, instead of a
+            // button that silently does nothing when tapped.
+            .disabled(!(word.hasAudio ?? true))
+            .opacity((word.hasAudio ?? true) ? 1 : 0.35)
+        }
+        .padding(.vertical, 4)
     }
 }
 

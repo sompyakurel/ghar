@@ -18,7 +18,12 @@ class Word(BaseModel):
     romanized: str               # "momo"
     english: str                 # "dumpling"
     audio_url: str               # "/audio/nepal-v1/food_momo_np.m4a"
+    has_audio: bool = True      # False while the family still needs to record it;
+                                # the app keeps these out of the listening quiz until then
     image: str | None = None     # optional illustration asset name
+    section: str | None = None   # optional subsection header inside a deck,
+                                 # e.g. "Vowels (स्वर)" inside Alphabets;
+                                 # the app groups words by this, in file order
     example_sentence_np: str | None = None   # Romanized Nepali, e.g. "Mitho chha!"
     example_sentence_en: str | None = None   # "It's delicious!"
 

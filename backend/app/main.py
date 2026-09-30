@@ -31,6 +31,25 @@ AUDIO_DIR = Path(__file__).parent / "static" / "audio"
 AUDIO_DIR.mkdir(parents=True, exist_ok=True)
 app.mount("/audio", StaticFiles(directory=AUDIO_DIR), name="audio")
 
+# Animal photos live here as base64 text files (pushed from the VM, which has
+# no binary channel to this Mac). One request -> decode once -> serve JPEG.
+# JSON image paths like "/images/nepal-v1/anim_kukur.jpg" map to
+#   app/static/images_b64/anim_kukur.jpg.b64
+import base64
+from fastapi import Response
+
+IMAGES_B64_DIR = Path(__file__).parent / "static" / "images_b64"
+IMAGES_B64_DIR.mkdir(parents=True, exist_ok=True)
+
+
+@app.get("/images/nepal-v1/{name}.jpg")
+def serve_image(name: str):
+    path = IMAGES_B64_DIR / f"{name}.jpg.b64"
+    if not path.exists():
+        raise HTTPException(status_code=404, detail=f"Image '{name}' not found")
+    data = base64.b64decode(path.read_text(encoding="ascii"))
+    return Response(content=data, media_type="image/jpeg")
+
 
 def load_pack(pack_id: str) -> ContentPack:
     path = DATA_DIR / f"{pack_id}.json"

@@ -13,6 +13,8 @@ struct Word: Codable, Identifiable {
     let romanized: String       // "momo"
     let english: String         // "dumpling"
     let audioUrl: String        // "/audio/nepal-v1/food_momo_np.m4a"
+    let hasAudio: Bool?        // nil = pack data from before this field existed; treat as true
+    let section: String?       // e.g. "Vowels (स्वर)" — subsection header inside a deck
     let image: String?
     let exampleSentenceNp: String?
     let exampleSentenceEn: String?
