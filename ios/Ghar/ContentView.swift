@@ -770,7 +770,7 @@ struct SayapatriArt: View {
                     .scaleEffect(bloom ? 1 : 0.2)
                     .rotationEffect(.degrees(bloom ? 0 : -40))
                     .animation(
-                        .spring(response: 0.7, dampingFactor: 0.55).delay(Double(i) * 0.3)
+                        .spring(response: 0.7, dampingFraction: 0.55).delay(Double(i) * 0.3)
                             .repeatForever(autoreverses: true),
                         value: bloom
                     )
@@ -1168,7 +1168,7 @@ struct FestivalScene: View {
         return Button {
             guard let word else { return }
             found.insert(spot.id)
-            withAnimation(.spring(response: 0.35, dampingFactor: 0.6)) {
+            withAnimation(.spring(response: 0.35, dampingFraction: 0.6)) {
                 lastWord = word
             }
             // The teaching card opens: it shows what the word means and
@@ -1178,7 +1178,7 @@ struct FestivalScene: View {
         } label: {
             hotspotFace(spot, isFound: isFound)
                 .scaleEffect(isFound ? 1.18 : 1.0)
-                .animation(.spring(response: 0.3, dampingFactor: 0.5), value: isFound)
+                .animation(.spring(response: 0.3, dampingFraction: 0.5), value: isFound)
         }
         .position(x: spot.x * size.width, y: spot.y * size.height)
     }
@@ -1235,7 +1235,7 @@ struct FestivalView: View {
                 TeachingCard(word: word) { teachingWord = nil }
             }
         }
-        .animation(.spring(response: 0.35, dampingFactor: 0.8), value: teachingWord?.id)
+        .animation(.spring(response: 0.35, dampingFraction: 0.8), value: teachingWord?.id)
     }
 
     /// Same as DeckView's: builds the full audio URL and plays it.
