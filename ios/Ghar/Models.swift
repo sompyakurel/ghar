@@ -25,6 +25,8 @@ struct Deck: Codable, Identifiable {
     let title: String
     let theme: String
     let coverImage: String?      // optional deck cover art, e.g. "/images/nepal-v1/cover_food.jpg"
+    let kind: String?            // nil = data from before this field existed; treat as "words".
+                                // "festival" decks open the animated FestivalView instead of the word list.
     let minAgeBand: String      // "seedling" | "explorer" | "rooted"
     let words: [Word]
 }

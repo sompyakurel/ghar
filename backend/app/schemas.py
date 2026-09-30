@@ -35,6 +35,9 @@ class Deck(BaseModel):
     cover_image: str | None = None  # optional deck cover art,
                                     # e.g. "/images/nepal-v1/cover_food.jpg";
                                     # the app shows it next to the deck title
+    kind: str = "words"             # "words" = plain word list;
+                                    # "festival" = animated festival experience
+                                    # (Dashain, Tihar); the app opens a scene
     min_age_band: str = Field(
         default="seedling",
         description="seedling (5-8) | explorer (9-13) | rooted (14-20)",

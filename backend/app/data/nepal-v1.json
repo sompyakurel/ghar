@@ -866,7 +866,207 @@
           "example_sentence_en": "The rabbit runs fast."
         }
       ]
-    }
+    },
+  {
+    "id": "dashain",
+    "title": "Dashain",
+    "cover_image": "/images/nepal-v1/cover_dashain.jpg",
+    "theme": "dashain",
+    "kind": "festival",
+    "min_age_band": "seedling",
+    "words": [
+      {
+        "id": "dash_dashain",
+        "devanagari": "दशैं",
+        "romanized": "dashain",
+        "english": "Nepal's biggest festival",
+        "audio_url": "/audio/nepal-v1/dash_dashain_np.m4a",
+        "has_audio": false,
+        "example_sentence_np": "Dashain aayo!",
+        "example_sentence_en": "Dashain is here!"
+      },
+      {
+        "id": "dash_tika",
+        "devanagari": "टीका",
+        "romanized": "tika",
+        "english": "red blessing mark for the forehead",
+        "audio_url": "/audio/nepal-v1/dash_tika_np.m4a",
+        "has_audio": false,
+        "example_sentence_np": "Tika lagaune.",
+        "example_sentence_en": "We wear the tika."
+      },
+      {
+        "id": "dash_jamara",
+        "devanagari": "जमरा",
+        "romanized": "jamara",
+        "english": "barley sprouts grown for nine days",
+        "audio_url": "/audio/nepal-v1/dash_jamara_np.m4a",
+        "has_audio": false,
+        "example_sentence_np": "Jamara ropne.",
+        "example_sentence_en": "We plant the jamara."
+      },
+      {
+        "id": "dash_ping",
+        "devanagari": "पिङ",
+        "romanized": "ping",
+        "english": "tall bamboo swing",
+        "audio_url": "/audio/nepal-v1/dash_ping_np.m4a",
+        "has_audio": false,
+        "example_sentence_np": "Ping khelne.",
+        "example_sentence_en": "Let's play on the swing!"
+      },
+      {
+        "id": "dash_changa",
+        "devanagari": "चङ्गा",
+        "romanized": "changa",
+        "english": "kite",
+        "audio_url": "/audio/nepal-v1/dash_changa_np.m4a",
+        "has_audio": false,
+        "example_sentence_np": "Changa udaune.",
+        "example_sentence_en": "Let's fly kites!"
+      },
+      {
+        "id": "dash_ghatasthapana",
+        "devanagari": "घटस्थापना",
+        "romanized": "ghatasthapana",
+        "english": "day one of Dashain",
+        "audio_url": "/audio/nepal-v1/dash_ghatasthapana_np.m4a",
+        "has_audio": false,
+        "example_sentence_np": "Ghatasthapana ma jamara ropchhau.",
+        "example_sentence_en": "On Ghatasthapana we plant jamara."
+      },
+      {
+        "id": "dash_ashirbad",
+        "devanagari": "आशिर्वाद",
+        "romanized": "ashirbad",
+        "english": "blessing from elders",
+        "audio_url": "/audio/nepal-v1/dash_ashirbad_np.m4a",
+        "has_audio": false,
+        "example_sentence_np": "Ashirbad line.",
+        "example_sentence_en": "We take blessings."
+      },
+      {
+        "id": "dash_bhoj",
+        "devanagari": "भोज",
+        "romanized": "bhoj",
+        "english": "festival feast",
+        "audio_url": "/audio/nepal-v1/dash_bhoj_np.m4a",
+        "has_audio": false,
+        "example_sentence_np": "Mitho bhoj khane.",
+        "example_sentence_en": "We eat a tasty feast."
+      }
+    ]
+  },
+  {
+    "id": "tihar",
+    "title": "Tihar",
+    "cover_image": "/images/nepal-v1/cover_tihar.jpg",
+    "theme": "tihar",
+    "kind": "festival",
+    "min_age_band": "seedling",
+    "words": [
+      {
+        "id": "tihar_tihar",
+        "devanagari": "तिहार",
+        "romanized": "tihar",
+        "english": "the festival of lights",
+        "audio_url": "/audio/nepal-v1/tihar_tihar_np.m4a",
+        "has_audio": false,
+        "example_sentence_np": "Shuva Tihar!",
+        "example_sentence_en": "Happy Tihar!"
+      },
+      {
+        "id": "tihar_diyo",
+        "devanagari": "दियो",
+        "romanized": "diyo",
+        "english": "clay oil lamp",
+        "audio_url": "/audio/nepal-v1/tihar_diyo_np.m4a",
+        "has_audio": false,
+        "example_sentence_np": "Diyo balne.",
+        "example_sentence_en": "Let's light the diyo."
+      },
+      {
+        "id": "tihar_sayapatri",
+        "devanagari": "सयपत्री",
+        "romanized": "sayapatri",
+        "english": "marigold flower",
+        "audio_url": "/audio/nepal-v1/tihar_sayapatri_np.m4a",
+        "has_audio": false,
+        "example_sentence_np": "Sayapatri ko mala.",
+        "example_sentence_en": "A marigold garland."
+      },
+      {
+        "id": "tihar_mala",
+        "devanagari": "माला",
+        "romanized": "mala",
+        "english": "flower garland",
+        "audio_url": "/audio/nepal-v1/tihar_mala_np.m4a",
+        "has_audio": false,
+        "example_sentence_np": "Mala lagaune.",
+        "example_sentence_en": "We wear garlands."
+      },
+      {
+        "id": "tihar_kaag",
+        "devanagari": "काग तिहार",
+        "romanized": "kaag tihar",
+        "english": "day of the crow",
+        "audio_url": "/audio/nepal-v1/tihar_kaag_np.m4a",
+        "has_audio": false,
+        "example_sentence_np": "Kaag lai bhat dine.",
+        "example_sentence_en": "We feed the crow rice."
+      },
+      {
+        "id": "tihar_kukur",
+        "devanagari": "कुकुर तिहार",
+        "romanized": "kukur tihar",
+        "english": "day of the dog",
+        "audio_url": "/audio/nepal-v1/tihar_kukur_np.m4a",
+        "has_audio": false,
+        "example_sentence_np": "Kukur lai mala lagaune.",
+        "example_sentence_en": "We put a garland on the dog."
+      },
+      {
+        "id": "tihar_laxmi",
+        "devanagari": "लक्ष्मी पूजा",
+        "romanized": "laxmi puja",
+        "english": "worship of Laxmi, goddess of wealth",
+        "audio_url": "/audio/nepal-v1/tihar_laxmi_np.m4a",
+        "has_audio": false,
+        "example_sentence_np": "Laxmi puja garne.",
+        "example_sentence_en": "We worship Laxmi."
+      },
+      {
+        "id": "tihar_bhaitika",
+        "devanagari": "भाइटीका",
+        "romanized": "bhai tika",
+        "english": "brothers' day",
+        "audio_url": "/audio/nepal-v1/tihar_bhaitika_np.m4a",
+        "has_audio": false,
+        "example_sentence_np": "Didi le bhai tika lagaune.",
+        "example_sentence_en": "Sister puts tika on brother."
+      },
+      {
+        "id": "tihar_deusi",
+        "devanagari": "देउसी भैलो",
+        "romanized": "deusi bhailo",
+        "english": "festival songs sung at doorsteps",
+        "audio_url": "/audio/nepal-v1/tihar_deusi_np.m4a",
+        "has_audio": false,
+        "example_sentence_np": "Deusi khelne.",
+        "example_sentence_en": "Let's sing deusi!"
+      },
+      {
+        "id": "tihar_selroti",
+        "devanagari": "सेलरोटी",
+        "romanized": "sel roti",
+        "english": "ring-shaped rice bread",
+        "audio_url": "/audio/nepal-v1/tihar_selroti_np.m4a",
+        "has_audio": false,
+        "example_sentence_np": "Sel roti mitho chha.",
+        "example_sentence_en": "Sel roti is tasty."
+      }
+    ]
+  }
   ],
   "id": "nepal-v1",
   "language": "Nepali",

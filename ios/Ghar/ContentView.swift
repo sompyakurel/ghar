@@ -23,12 +23,12 @@ struct ContentView: View {
                     // --- Tab 1: Lessons (the deck list you already had) ---
                     NavigationStack {
                         List(pack.decks) { deck in
-                            NavigationLink(destination: DeckView(deck: deck)) {
+                            NavigationLink(destination: lessonDestination(for: deck)) {
                                 HStack(spacing: 12) {
                                     DeckCover(deck: deck)
                                     VStack(alignment: .leading) {
                                         Text(deck.title).font(.headline)
-                                        Text("\(deck.words.count) words")
+                                        Text(deck.kind == "festival" ? "Interactive festival" : "\(deck.words.count) words")
                                             .font(.subheadline)
                                             .foregroundStyle(.secondary)
                                     }
@@ -313,6 +313,380 @@ struct DeckCover: View {
         }
         .frame(width: 64, height: 64)
         .clipShape(RoundedRectangle(cornerRadius: 14))
+    }
+}
+
+// MARK: - Festival scenes (Dashain + Tihar)
+// Animated, tappable festival pages. A festival deck opens FestivalView:
+// a living scene at the top (hotspots kids tap to hear the Nepali word)
+// and the deck's vocabulary list below, reusing the normal WordRow.
+
+// How a hotspot idles when nobody is touching it.
+enum HotspotMotion {
+    case sway    // swings side to side (the ping, jamara leaves)
+    case bob     // bobs up and down (kites, the feast)
+    case pulse   // grows and shrinks (tika, diyos)
+}
+
+// One tappable thing in a festival scene.
+struct FestivalHotspot: Identifiable {
+    let id: String       // unique in this scene, e.g. "tihar_diyo_3"
+    let wordId: String   // the Word it teaches, e.g. "tihar_diyo"
+    let emoji: String    // its face — except the ping, which is drawn
+    let x: Double        // position as a fraction of the scene (0...1)
+    let y: Double
+    let size: CGFloat    // emoji point size
+    let motion: HotspotMotion
+    let startsUnlit: Bool // true for Tihar diyos: gray until tapped, then glowing
+}
+
+// A twinkling star's spot in the night sky (fractions of the scene).
+struct StarSpot {
+    let x: Double
+    let y: Double
+    let delay: Double   // staggers the twinkles so they don't blink together
+}
+
+// Everything a festival scene needs to draw itself.
+struct FestivalConfig {
+    let skyTop: Color
+    let skyBottom: Color
+    let ground: Color
+    let night: Bool
+    let goal: String        // the challenge pill at the top, e.g. "Find all 5 Dashain treasures!"
+    let doneTitle: String   // the banner once everything is found
+    let hotspots: [FestivalHotspot]
+    let stars: [StarSpot]
+
+    // Festival decks are looked up by deck id; anything unknown gets Dashain.
+    static func forDeck(_ id: String) -> FestivalConfig {
+        switch id {
+        case "tihar": return .tihar
+        case "dashain": return .dashain
+        default: return .dashain
+        }
+    }
+
+    static let dashain = FestivalConfig(
+        skyTop: Color(red: 1.0, green: 0.62, blue: 0.35),
+        skyBottom: Color(red: 1.0, green: 0.88, blue: 0.66),
+        ground: Color(red: 0.38, green: 0.62, blue: 0.32),
+        night: false,
+        goal: "Find all 5 Dashain treasures!",
+        doneTitle: "शुभ दशैं! Happy Dashain! 🪁",
+        hotspots: [
+            FestivalHotspot(id: "dash_tika", wordId: "dash_tika",
+                            emoji: "🔴", x: 0.14, y: 0.34, size: 42, motion: .pulse, startsUnlit: false),
+            FestivalHotspot(id: "dash_jamara", wordId: "dash_jamara",
+                            emoji: "🌱", x: 0.87, y: 0.36, size: 48, motion: .sway, startsUnlit: false),
+            FestivalHotspot(id: "dash_ping", wordId: "dash_ping",
+                            emoji: "", x: 0.5, y: 0.5, size: 0, motion: .sway, startsUnlit: false),
+            FestivalHotspot(id: "dash_changa", wordId: "dash_changa",
+                            emoji: "🪁", x: 0.74, y: 0.2, size: 52, motion: .bob, startsUnlit: false),
+            FestivalHotspot(id: "dash_bhoj", wordId: "dash_bhoj",
+                            emoji: "🍛", x: 0.18, y: 0.7, size: 48, motion: .bob, startsUnlit: false),
+        ],
+        stars: []
+    )
+
+    static let tihar = FestivalConfig(
+        skyTop: Color(red: 0.07, green: 0.09, blue: 0.25),
+        skyBottom: Color(red: 0.22, green: 0.16, blue: 0.42),
+        ground: Color(red: 0.14, green: 0.12, blue: 0.2),
+        night: true,
+        goal: "Light all 5 diyos, then find every treasure!",
+        doneTitle: "शुभ तिहार! Happy Tihar! 🪔",
+        hotspots: [
+            FestivalHotspot(id: "tihar_diyo_1", wordId: "tihar_diyo",
+                            emoji: "🪔", x: 0.1, y: 0.74, size: 54, motion: .pulse, startsUnlit: true),
+            FestivalHotspot(id: "tihar_diyo_2", wordId: "tihar_diyo",
+                            emoji: "🪔", x: 0.3, y: 0.74, size: 54, motion: .pulse, startsUnlit: true),
+            FestivalHotspot(id: "tihar_diyo_3", wordId: "tihar_diyo",
+                            emoji: "🪔", x: 0.5, y: 0.74, size: 54, motion: .pulse, startsUnlit: true),
+            FestivalHotspot(id: "tihar_diyo_4", wordId: "tihar_diyo",
+                            emoji: "🪔", x: 0.7, y: 0.74, size: 54, motion: .pulse, startsUnlit: true),
+            FestivalHotspot(id: "tihar_diyo_5", wordId: "tihar_diyo",
+                            emoji: "🪔", x: 0.9, y: 0.74, size: 54, motion: .pulse, startsUnlit: true),
+            FestivalHotspot(id: "tihar_sayapatri", wordId: "tihar_sayapatri",
+                            emoji: "🌼", x: 0.16, y: 0.4, size: 46, motion: .sway, startsUnlit: false),
+            FestivalHotspot(id: "tihar_kukur", wordId: "tihar_kukur",
+                            emoji: "🐕", x: 0.84, y: 0.44, size: 54, motion: .bob, startsUnlit: false),
+        ],
+        stars: [
+            StarSpot(x: 0.08, y: 0.08, delay: 0),
+            StarSpot(x: 0.24, y: 0.18, delay: 0.5),
+            StarSpot(x: 0.4, y: 0.07, delay: 1.0),
+            StarSpot(x: 0.56, y: 0.16, delay: 0.3),
+            StarSpot(x: 0.7, y: 0.08, delay: 0.8),
+            StarSpot(x: 0.86, y: 0.2, delay: 0.2),
+            StarSpot(x: 0.14, y: 0.3, delay: 0.7),
+            StarSpot(x: 0.48, y: 0.28, delay: 0.4),
+            StarSpot(x: 0.92, y: 0.34, delay: 0.9),
+            StarSpot(x: 0.32, y: 0.12, delay: 0.6),
+        ]
+    )
+}
+
+// The idle motion for a hotspot: sway, bob, or pulse, forever.
+struct HotspotMotionModifier: ViewModifier {
+    let motion: HotspotMotion
+    var anchor: UnitPoint = .center
+    @State private var moving = false
+
+    func body(content: Content) -> some View {
+        content
+            .rotationEffect(.degrees(motion == .sway ? (moving ? 9 : -9) : 0), anchor: anchor)
+            .offset(y: motion == .bob ? (moving ? -9 : 9) : 0)
+            .scaleEffect(motion == .pulse ? (moving ? 1.12 : 1.0) : 1.0)
+            .onAppear { moving = true }
+            .animation(
+                .easeInOut(duration: motion == .pulse ? 1.1 : 1.8)
+                    .repeatForever(autoreverses: true),
+                value: moving
+            )
+    }
+}
+
+// One twinkling star in the Tihar night sky.
+struct TwinkleStar: View {
+    let point: CGPoint
+    let delay: Double
+    @State private var bright = false
+
+    var body: some View {
+        Circle()
+            .fill(.white)
+            .frame(width: 5, height: 5)
+            .opacity(bright ? 1 : 0.2)
+            .position(point)
+            .onAppear {
+                // Stagger the first twinkle so the sky doesn't blink in sync.
+                DispatchQueue.main.asyncAfter(deadline: .now() + delay) { bright = true }
+            }
+            .animation(.easeInOut(duration: 1.4).repeatForever(autoreverses: true), value: bright)
+    }
+}
+
+// The ping: a bamboo swing drawn with shapes, for the Dashain scene.
+// (Drawn instead of emoji so it can sway from its top bar like the real thing.)
+struct SwingDrawing: View {
+    var body: some View {
+        VStack(spacing: 0) {
+            RoundedRectangle(cornerRadius: 3)
+                .fill(Color(red: 0.55, green: 0.36, blue: 0.2))
+                .frame(width: 76, height: 7)
+            HStack(spacing: 44) {
+                Rectangle()
+                    .fill(Color(red: 0.55, green: 0.36, blue: 0.2))
+                    .frame(width: 3, height: 38)
+                Rectangle()
+                    .fill(Color(red: 0.55, green: 0.36, blue: 0.2))
+                    .frame(width: 3, height: 38)
+            }
+            RoundedRectangle(cornerRadius: 4)
+                .fill(Color(red: 0.55, green: 0.36, blue: 0.2))
+                .frame(width: 56, height: 9)
+        }
+    }
+}
+
+// Where a Lessons row leads: festival decks open the animated scene,
+// plain word decks open the normal word list.
+@ViewBuilder
+func lessonDestination(for deck: Deck) -> some View {
+    if deck.kind == "festival" {
+        FestivalView(deck: deck)
+    } else {
+        DeckView(deck: deck)
+    }
+}
+
+// MARK: - Festival scene engine
+
+// The animated scene at the top of a festival page: a living diorama of
+// Dashain or Tihar. Kids tap the hotspots to hear each Nepali word; finding
+// them all earns the same voice cheer + confetti as finishing a mission.
+struct FestivalScene: View {
+    let deck: Deck
+    let config: FestivalConfig
+
+    @State private var found: Set<String> = []
+    @State private var lastWord: Word?
+    @State private var showConfetti = false
+    @State private var celebrated = false
+
+    var body: some View {
+        ZStack {
+            // Sky and ground.
+            VStack(spacing: 0) {
+                LinearGradient(colors: [config.skyTop, config.skyBottom],
+                               startPoint: .top, endPoint: .bottom)
+                config.ground.frame(height: 64)
+            }
+
+            // Day: sun + clouds. Night: twinkling stars.
+            // Hotspots float above, positioned by fractions so any screen works.
+            GeometryReader { geo in
+                if config.night {
+                    ForEach(config.stars.indices, id: \.self) { i in
+                        let star = config.stars[i]
+                        TwinkleStar(
+                            point: CGPoint(x: star.x * geo.size.width,
+                                           y: star.y * geo.size.height),
+                            delay: star.delay
+                        )
+                    }
+                } else {
+                    Circle()
+                        .fill(.yellow)
+                        .frame(width: 54, height: 54)
+                        .position(x: geo.size.width * 0.88, y: geo.size.height * 0.14)
+                    cloud(at: CGPoint(x: geo.size.width * 0.25, y: geo.size.height * 0.14), width: 90)
+                    cloud(at: CGPoint(x: geo.size.width * 0.55, y: geo.size.height * 0.26), width: 70)
+                }
+                ForEach(config.hotspots) { spot in
+                    hotspotButton(spot, in: geo.size)
+                }
+            }
+
+            // Goal pill at the top, discovered-word banner at the bottom.
+            VStack {
+                Text(config.goal)
+                    .font(.caption)
+                    .bold()
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 7)
+                    .background(.ultraThinMaterial)
+                    .clipShape(Capsule())
+                    .padding(.top, 10)
+                Spacer()
+                if celebrated {
+                    Text(config.doneTitle)
+                        .font(.headline)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 9)
+                        .background(.ultraThinMaterial)
+                        .clipShape(RoundedRectangle(cornerRadius: 14))
+                        .padding(.bottom, 10)
+                        .transition(.scale.combined(with: .opacity))
+                } else if let word = lastWord {
+                    Text("\(word.devanagari) · \(word.romanized) — \(word.english)")
+                        .font(.subheadline)
+                        .bold()
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 9)
+                        .background(.ultraThinMaterial)
+                        .clipShape(RoundedRectangle(cornerRadius: 14))
+                        .padding(.bottom, 10)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+            }
+        }
+        .frame(height: 340)
+        .clipShape(RoundedRectangle(cornerRadius: 20))
+        .overlay {
+            if showConfetti {
+                ConfettiBurst()
+                    .allowsHitTesting(false)
+                    .task {
+                        try? await Task.sleep(nanoseconds: 1_200_000_000)
+                        showConfetti = false
+                    }
+            }
+        }
+    }
+
+    // One cloud: three overlapping white ellipses.
+    private func cloud(at point: CGPoint, width: CGFloat) -> some View {
+        ZStack {
+            Ellipse().fill(.white.opacity(0.92))
+                .frame(width: width, height: width * 0.45)
+            Ellipse().fill(.white.opacity(0.92))
+                .frame(width: width * 0.6, height: width * 0.35)
+                .offset(x: -width * 0.25, y: 6)
+            Ellipse().fill(.white.opacity(0.92))
+                .frame(width: width * 0.55, height: width * 0.32)
+                .offset(x: width * 0.25, y: 7)
+        }
+        .position(point)
+    }
+
+    // One hotspot button: speaks the word, marks it found, and celebrates the full set.
+    private func hotspotButton(_ spot: FestivalHotspot, in size: CGSize) -> some View {
+        let word = deck.words.first { $0.id == spot.wordId }
+        let isFound = found.contains(spot.id)
+        return Button {
+            guard let word else { return }
+            // Hear it, like every other tap-to-speak spot in the app.
+            NepaliSpeaker.say(nepali: word.devanagari, romanized: word.romanized)
+            found.insert(spot.id)
+            withAnimation(.spring(response: 0.35, dampingFactor: 0.6)) {
+                lastWord = word
+            }
+            // Everything found: the win moment — voice cheer + confetti, once.
+            if found.count == config.hotspots.count, !celebrated {
+                celebrated = true
+                WinFanfare.play()
+                showConfetti = false
+                DispatchQueue.main.async { showConfetti = true }
+            }
+        } label: {
+            hotspotFace(spot, isFound: isFound)
+                .scaleEffect(isFound ? 1.18 : 1.0)
+                .animation(.spring(response: 0.3, dampingFactor: 0.5), value: isFound)
+        }
+        .position(x: spot.x * size.width, y: spot.y * size.height)
+    }
+
+    // What a hotspot looks like: the swing is drawn, everything else is emoji.
+    // Unlit diyos sit gray until tapped, then glow.
+    @ViewBuilder
+    private func hotspotFace(_ spot: FestivalHotspot, isFound: Bool) -> some View {
+        if spot.id == "dash_ping" {
+            SwingDrawing()
+                .modifier(HotspotMotionModifier(motion: spot.motion, anchor: .top))
+        } else {
+            let lit = !spot.startsUnlit || isFound
+            Text(spot.emoji)
+                .font(.system(size: spot.size))
+                .grayscale(lit ? 0 : 1)
+                .opacity(spot.startsUnlit && !lit ? 0.5 : 1)
+                .shadow(color: spot.startsUnlit && lit ? .orange : .clear,
+                        radius: spot.startsUnlit && lit ? 14 : 0)
+                .modifier(HotspotMotionModifier(motion: spot.motion))
+        }
+    }
+}
+
+// A festival deck's page: the animated scene, then the vocabulary list
+// with the same tap-to-play WordRow the other decks use.
+struct FestivalView: View {
+    let deck: Deck
+    @State private var player: AVPlayer?
+
+    var body: some View {
+        let config = FestivalConfig.forDeck(deck.id)
+        ScrollView {
+            VStack(spacing: 16) {
+                FestivalScene(deck: deck, config: config)
+                    .padding(.horizontal)
+                ForEach(deck.words) { word in
+                    WordRow(word: word, onPlay: play(word:))
+                }
+                .padding(.horizontal)
+            }
+            .padding(.vertical)
+        }
+        .navigationTitle(deck.title)
+    }
+
+    /// Same as DeckView's: builds the full audio URL and plays it.
+    /// Festival words have no recordings yet, so their speaker buttons
+    /// sit dimmed and disabled until Som records them — then they just work.
+    private func play(word: Word) {
+        guard let url = URL(string: GharAPI.baseURLString + word.audioUrl) else { return }
+        player = AVPlayer(url: url)
+        player?.play()
     }
 }
 
