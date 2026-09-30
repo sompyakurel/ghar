@@ -989,7 +989,11 @@ struct DeckView: View {
     var grouped: [(header: String?, words: [Word])] {
         var groups: [(header: String?, words: [Word])] = []
         for word in deck.words {
-            if groups.last?.header == word.section {
+            // Guard against the empty list: on the very first word of a deck
+            // with no sections (Food, Family), `groups.last?.header` is nil
+            // and `word.section` is nil, so `nil == nil` looked "equal" and
+            // the code below tried to append to a group that doesn't exist yet.
+            if !groups.isEmpty, groups.last?.header == word.section {
                 groups[groups.count - 1].words.append(word)
             } else {
                 groups.append((word.section, [word]))
