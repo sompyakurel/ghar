@@ -1,7 +1,7 @@
 import SwiftUI
 import AVFoundation
 
-/// First screen: tab bar with Lessons, Missions, and Quiz, loaded live from our Python backend.
+/// First screen: tab bar with Lessons, Missions, Quiz, and My Ghar, loaded live from our Python backend.
 ///
 /// Teaching notes:
 /// - `@State` = "this view owns this data, redraw when it changes."
@@ -53,6 +53,15 @@ struct ContentView: View {
                     }
                     .tabItem {
                         Label("Quiz", systemImage: "questionmark.circle.fill")
+                    }
+
+                    // --- Tab 4: My Ghar (the house you build with XP) ---
+                    NavigationStack {
+                        MyGharView()
+                            .navigationTitle("My Ghar")
+                    }
+                    .tabItem {
+                        Label("My Ghar", systemImage: "house.fill")
                     }
                 }
             } else if let errorMessage {
@@ -342,6 +351,170 @@ struct QuizView: View {
         if solved, option.id == current?.id { return .green.opacity(0.25) }
         if wrongIDs.contains(option.id) { return .red.opacity(0.25) }
         return .gray.opacity(0.15)
+    }
+}
+
+/// A plain triangle. SwiftUI has no built-in triangle, so we draw one:
+/// apex at top-center, base along the bottom, then close the path.
+/// Used for the roof and the prayer flags.
+///
+/// Teaching notes:
+/// - `Shape` is SwiftUI's "draw anything" protocol: you get a rectangle
+///   (`rect`) and return a `Path`. Fill it, stroke it, size it — it's
+///   vector art, crisp at any size, zero image assets.
+struct Triangle: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: rect.midX, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
+        path.closeSubpath()
+        return path
+    }
+}
+
+/// The My Ghar tab: your house, built from your XP. The roof and walls
+/// are always there; every decoration unlocks at an XP threshold — locked
+/// ones show as grey silhouettes so the kid sees what's coming.
+///
+/// Teaching notes:
+/// - Still zero image assets: the whole house is shapes (triangles,
+///   rounded rectangles, circles, ellipses).
+/// - Everything keys off the same "ghar.xp.total" locker. Earn XP in
+///   the quiz or missions, the house builds itself. One source of truth.
+/// - Positions inside the house body use `.offset(x:y)` — points from the
+///   center. Simple to reason about, easy to nudge.
+struct MyGharView: View {
+    @AppStorage("ghar.xp.total") private var totalXP = 0
+
+    private let diyoAt = 10
+    private let windowsAt = 25
+    private let doorAt = 50
+    private let flagsAt = 75
+    private let buddyAt = 100
+
+    private let flagColors: [Color] = [.blue, .orange, .red, .green, .yellow]
+
+    /// The collection shelf: every decoration, its price in XP, and whether
+    /// it's unlocked yet. Single source for the shelf below the house.
+    private var decorations: [(name: String, icon: String, threshold: Int)] {
+        [
+            (name: "Diyo lamp", icon: "🪔", threshold: diyoAt),
+            (name: "Windows", icon: "🪟", threshold: windowsAt),
+            (name: "Door", icon: "🚪", threshold: doorAt),
+            (name: "Prayer flags", icon: "🚩", threshold: flagsAt),
+            (name: "Buddy", icon: "😊", threshold: buddyAt),
+        ]
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 16) {
+                Text("⭐ \(totalXP) XP")
+                    .font(.title)
+                    .bold()
+
+                // The house itself — stacked with zero spacing so the
+                // flags sit on the roof and the roof sits on the walls.
+                VStack(spacing: 0) {
+                    // Prayer flags fly above the roof
+                    HStack(spacing: 6) {
+                        ForEach(0..<7, id: \.self) { i in
+                            Triangle()
+                                .fill(totalXP >= flagsAt ? flagColors[i % flagColors.count] : .gray.opacity(0.25))
+                                .frame(width: 24, height: 20)
+                        }
+                    }
+                    .padding(.bottom, 4)
+
+                    // Roof — crimson, like the app icon
+                    Triangle()
+                        .fill(Color(red: 0.75, green: 0.15, blue: 0.2))
+                        .frame(width: 250, height: 110)
+
+                    // Body — cream walls, decorations positioned inside
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 10)
+                            .fill(Color(red: 1.0, green: 0.96, blue: 0.88))
+                            .frame(width: 210, height: 170)
+                            .shadow(radius: 3)
+
+                        HStack(spacing: 70) {
+                            window
+                            window
+                        }
+                        .offset(y: -40)
+
+                        RoundedRectangle(cornerRadius: 6)
+                            .fill(totalXP >= doorAt ? .brown : .gray.opacity(0.25))
+                            .frame(width: 54, height: 84)
+                            .offset(y: 38)
+
+                        diyo.offset(x: -72, y: 48)
+                        buddy.offset(x: 72, y: 42)
+                    }
+                }
+
+                // Collection shelf
+                VStack(alignment: .leading, spacing: 10) {
+                    ForEach(decorations, id: \.name) { d in
+                        HStack {
+                            Text(d.icon).font(.title2)
+                            Text(d.name)
+                            Spacer()
+                            if totalXP >= d.threshold {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundStyle(.green)
+                            } else {
+                                Text("🔒 \(d.threshold) XP")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                }
+                .padding()
+                .background(.gray.opacity(0.1))
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .padding(.horizontal)
+            }
+            .padding(.vertical)
+        }
+    }
+
+    /// A window: blue pane when unlocked, grey silhouette when locked.
+    private var window: some View {
+        RoundedRectangle(cornerRadius: 4)
+            .fill(totalXP >= windowsAt ? Color(red: 0.5, green: 0.75, blue: 0.95) : .gray.opacity(0.25))
+            .frame(width: 42, height: 42)
+    }
+
+    /// A diyo (oil lamp): clay base with a flame, or grey when locked.
+    private var diyo: some View {
+        VStack(spacing: 1) {
+            Circle()
+                .fill(totalXP >= diyoAt ? .orange : .gray.opacity(0.25))
+                .frame(width: 14, height: 14)
+            Ellipse()
+                .fill(totalXP >= diyoAt ? .brown : .gray.opacity(0.25))
+                .frame(width: 30, height: 12)
+        }
+    }
+
+    /// The buddy: a little round friend who moves in at 100 XP.
+    private var buddy: some View {
+        ZStack {
+            Circle()
+                .fill(totalXP >= buddyAt ? .yellow : .gray.opacity(0.25))
+                .frame(width: 38, height: 38)
+            if totalXP >= buddyAt {
+                HStack(spacing: 8) {
+                    Circle().fill(.black).frame(width: 5, height: 5)
+                    Circle().fill(.black).frame(width: 5, height: 5)
+                }
+                .offset(y: -4)
+            }
+        }
     }
 }
 
