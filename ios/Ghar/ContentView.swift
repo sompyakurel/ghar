@@ -1,7 +1,7 @@
 import SwiftUI
 import AVFoundation
 
-/// First screen: tab bar with Lessons and Missions, loaded live from our Python backend.
+/// First screen: tab bar with Lessons, Missions, and Quiz, loaded live from our Python backend.
 ///
 /// Teaching notes:
 /// - `@State` = "this view owns this data, redraw when it changes."
@@ -44,6 +44,15 @@ struct ContentView: View {
                     }
                     .tabItem {
                         Label("Missions", systemImage: "flag.fill")
+                    }
+
+                    // --- Tab 3: Quiz (listening game) ---
+                    NavigationStack {
+                        QuizView(words: pack.decks.flatMap { $0.words })
+                            .navigationTitle("Quiz")
+                    }
+                    .tabItem {
+                        Label("Quiz", systemImage: "questionmark.circle.fill")
                     }
                 }
             } else if let errorMessage {
@@ -232,6 +241,107 @@ struct MissionDetailView: View {
         guard let url = URL(string: GharAPI.baseURLString + mission.audioUrl) else { return }
         player = AVPlayer(url: url)
         player?.play()
+    }
+}
+
+/// The Quiz tab: a listening game. Hear a Nepali word, tap what it means.
+/// +5 XP per correct answer — fed into the SAME total as missions.
+///
+/// Teaching notes:
+/// - A "question" is just @State: the `current` word, the shuffled
+///   `options`, whether it's `solved`, and which taps were `wrongIDs`.
+///   Everything on screen is derived from those four — no hidden state.
+/// - `onAppear` and the "Next word" button both call `newQuestion()`.
+///   Same call in two places = it deserved its own function.
+/// - XP lands in the same "ghar.xp.total" locker as missions. One shared
+///   total, because both views watch the same key.
+/// - Wrong taps just mark red and let the kid retry — friendlier for
+///   learning than one-strike. The +5 lands exactly once, inside the
+///   branch where the right answer is tapped.
+struct QuizView: View {
+    let words: [Word]
+    @State private var player: AVPlayer?
+    @AppStorage("ghar.xp.total") private var totalXP = 0
+
+    @State private var current: Word?
+    @State private var options: [Word] = []
+    @State private var solved = false
+    @State private var wrongIDs: Set<String> = []
+
+    var body: some View {
+        VStack(spacing: 20) {
+            Text("What did you hear?")
+                .font(.title2)
+                .bold()
+
+            Button(action: playWord) {
+                Label("Play word", systemImage: "speaker.wave.2.fill")
+                    .font(.title3)
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(current == nil)
+
+            ForEach(options) { option in
+                Button(action: { answer(option) }) {
+                    Text(option.english)
+                        .font(.headline)
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(background(for: option))
+                        .foregroundStyle(.primary)
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                }
+                .disabled(solved)
+            }
+
+            if solved {
+                Button("Next word") { newQuestion() }
+                    .buttonStyle(.bordered)
+            }
+
+            Spacer()
+        }
+        .padding()
+        .onAppear { newQuestion() }
+    }
+
+    /// Fresh question: a random word (never the same twice in a row),
+    /// plus up to 3 random distractors, all shuffled. Auto-plays the word.
+    private func newQuestion() {
+        let pool = words.filter { $0.id != current?.id }
+        guard let next = pool.randomElement() else { return }
+        current = next
+        let distractors = words.filter { $0.id != next.id }.shuffled().prefix(3)
+        options = ([next] + distractors).shuffled()
+        solved = false
+        wrongIDs = []
+        playWord()
+    }
+
+    /// Same streaming trick as everywhere else: server + path from JSON.
+    /// Words still missing audio just stay silent — no crash.
+    private func playWord() {
+        guard let current,
+              let url = URL(string: GharAPI.baseURLString + current.audioUrl) else { return }
+        player = AVPlayer(url: url)
+        player?.play()
+    }
+
+    private func answer(_ option: Word) {
+        if option.id == current?.id {
+            solved = true
+            totalXP += 5
+        } else {
+            wrongIDs.insert(option.id)
+        }
+    }
+
+    /// Button colors, derived from state: right answer goes green,
+    /// wrong taps go red, everything else stays neutral.
+    private func background(for option: Word) -> Color {
+        if solved, option.id == current?.id { return .green.opacity(0.25) }
+        if wrongIDs.contains(option.id) { return .red.opacity(0.25) }
+        return .gray.opacity(0.15)
     }
 }
 
