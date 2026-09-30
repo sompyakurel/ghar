@@ -1,5 +1,6 @@
 import SwiftUI
 import AVFoundation
+import UIKit
 
 /// First screen: tab bar with Lessons, Missions, Quiz, and My Ghar, loaded live from our Python backend.
 ///
@@ -169,11 +170,14 @@ struct MissionsView: View {
 ///   tapping twice can't double-count.
 /// - The play button reuses the AVPlayer trick from DeckView: the player
 ///   lives in @State so SwiftUI doesn't throw it away mid-sound.
+/// - The win moment (chime + confetti) fires only when COMPLETING, not
+///   when un-completing. Small detail, big feel.
 struct MissionDetailView: View {
     let mission: Mission
     @State private var player: AVPlayer?
     @AppStorage("ghar.xp.total") private var totalXP = 0
     @AppStorage("ghar.missions.completed") private var completedData = Data()
+    @State private var showConfetti = false
 
     private var completedIDs: Set<String> {
         (try? JSONDecoder().decode(Set<String>.self, from: completedData)) ?? []
@@ -191,6 +195,9 @@ struct MissionDetailView: View {
         } else {
             ids.insert(mission.id)
             totalXP += mission.xp
+            // The win moment: chime + confetti. (Un-completing stays quiet.)
+            WinFanfare.play()
+            showConfetti = true
         }
         completedData = (try? JSONEncoder().encode(ids)) ?? Data()
     }
@@ -241,6 +248,18 @@ struct MissionDetailView: View {
         }
         .navigationTitle(mission.titleEn)
         .navigationBarTitleDisplayMode(.inline)
+        // Confetti layer: floats on top, ignores taps, and removes itself
+        // after ~1.2s — the timer lives exactly as long as the confetti.
+        .overlay {
+            if showConfetti {
+                ConfettiBurst()
+                    .allowsHitTesting(false)
+                    .task {
+                        try? await Task.sleep(nanoseconds: 1_200_000_000)
+                        showConfetti = false
+                    }
+            }
+        }
     }
 
     /// Same streaming trick as DeckView: server address + path from JSON.
@@ -276,6 +295,7 @@ struct QuizView: View {
     @State private var options: [Word] = []
     @State private var solved = false
     @State private var wrongIDs: Set<String> = []
+    @State private var showConfetti = false
 
     var body: some View {
         VStack(spacing: 20) {
@@ -312,6 +332,17 @@ struct QuizView: View {
         }
         .padding()
         .onAppear { newQuestion() }
+        // Confetti layer: floats on top, ignores taps, removes itself after ~1.2s.
+        .overlay {
+            if showConfetti {
+                ConfettiBurst()
+                    .allowsHitTesting(false)
+                    .task {
+                        try? await Task.sleep(nanoseconds: 1_200_000_000)
+                        showConfetti = false
+                    }
+            }
+        }
     }
 
     /// Fresh question: a random word (never the same twice in a row),
@@ -340,6 +371,9 @@ struct QuizView: View {
         if option.id == current?.id {
             solved = true
             totalXP += 5
+            // The win moment: chime + confetti.
+            WinFanfare.play()
+            showConfetti = true
         } else {
             wrongIDs.insert(option.id)
         }
@@ -370,6 +404,116 @@ struct Triangle: Shape {
         path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
         path.closeSubpath()
         return path
+    }
+}
+
+/// One piece of confetti: its color, flight direction, and spin.
+/// `Identifiable` so ForEach can tell the pieces apart.
+struct ConfettiPiece: Identifiable {
+    let id = UUID()
+    let color: Color
+    let angle: Double     // radians: which way it flies
+    let distance: CGFloat // how far it flies
+    let size: CGFloat
+    let spin: Double      // degrees of rotation at the end
+}
+
+/// A confetti burst: ~40 colored pieces explode outward from the center,
+/// spin, drift down a little, and fade — pure SwiftUI, no packages,
+/// no image assets.
+///
+/// Teaching notes:
+/// - The pieces are pre-rolled with random values ONCE in a `let`.
+///   Re-rolling on every redraw would make them jitter.
+/// - `exploded` flips false -> true in `onAppear`, and offset + rotation
+///   + opacity all animate together in one `withAnimation` — that's what
+///   makes it a burst instead of a pop.
+struct ConfettiBurst: View {
+    @State private var exploded = false
+
+    private let pieces: [ConfettiPiece] = (0..<40).map { _ in
+        ConfettiPiece(
+            color: [.red, .orange, .yellow, .green, .blue, .purple, .pink].randomElement()!,
+            angle: Double.random(in: 0..<(2 * .pi)),
+            distance: CGFloat.random(in: 60...160),
+            size: CGFloat.random(in: 6...12),
+            spin: Double.random(in: -360...360)
+        )
+    }
+
+    var body: some View {
+        ZStack {
+            ForEach(pieces) { piece in
+                RoundedRectangle(cornerRadius: 2)
+                    .fill(piece.color)
+                    .frame(width: piece.size, height: piece.size * 0.6)
+                    .offset(x: exploded ? cos(piece.angle) * piece.distance : 0,
+                            y: exploded ? sin(piece.angle) * piece.distance + 50 : 0)
+                    .rotationEffect(.degrees(exploded ? piece.spin : 0))
+                    .opacity(exploded ? 0 : 1)
+            }
+        }
+        .onAppear {
+            withAnimation(.easeOut(duration: 1.0)) { exploded = true }
+        }
+    }
+}
+
+/// Plays a tiny "ta-da!" chime — synthesized on the spot with math,
+/// no audio files needed. Also fires the Apple-blessed success haptic.
+///
+/// Teaching notes:
+/// - Sound is just air wiggling: a sine wave at 523 Hz IS the note C5.
+///   We fill a buffer with sine values, fading out so it doesn't click.
+/// - `AVAudioEngine` is Apple's pro-audio plumbing: attach a player node,
+///   connect it to the speaker (mainMixerNode), schedule three buffers a
+///   hair apart for the rising C-E-G arpeggio.
+/// - The engine lives in a `static var` so nothing throws it away
+///   mid-chime — same reason the AVPlayer lives in @State elsewhere.
+/// - `UINotificationFeedbackGenerator` = the iPhone success buzz. One
+///   line, and it's the Apple-approved way to say "you did it!"
+enum WinFanfare {
+    private static var engine: AVAudioEngine?
+
+    static func play() {
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
+
+        let engine = AVAudioEngine()
+        self.engine = engine
+        let player = AVAudioPlayerNode()
+        engine.attach(player)
+        engine.connect(player, to: engine.mainMixerNode, format: nil)
+        do { try engine.start() } catch { return }
+        player.play()
+
+        // C5 -> E5 -> G5, each 0.12s apart: a rising major arpeggio.
+        for (i, freq) in [523.25, 659.25, 783.99].enumerated() {
+            DispatchQueue.main.asyncAfter(deadline: .now() + Double(i) * 0.12) {
+                player.scheduleBuffer(toneBuffer(frequency: freq), completionHandler: nil)
+            }
+        }
+
+        // Clean up after the last note rings out.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+            engine.stop()
+            self.engine = nil
+        }
+    }
+
+    /// One note: 0.18 seconds of sine wave with a fade-out envelope.
+    private static func toneBuffer(frequency: Double) -> AVAudioPCMBuffer {
+        let sampleRate = 44_100.0
+        let frames = AVAudioFrameCount(sampleRate * 0.18)
+        let format = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 1)!
+        let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frames)!
+        buffer.frameLength = frames
+        let data = buffer.floatChannelData![0]
+        for i in 0..<Int(frames) {
+            let t = Double(i) / sampleRate
+            let envelope = 1.0 - Double(i) / Double(frames)
+            data[i] = Float(sin(2 * .pi * frequency * t) * envelope * 0.4)
+        }
+        return buffer
     }
 }
 
