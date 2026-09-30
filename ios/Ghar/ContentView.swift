@@ -501,6 +501,540 @@ func lessonDestination(for deck: Deck) -> some View {
     }
 }
 
+// MARK: - Teaching moments ("show me" cards)
+// Tapping a festival hotspot or vocabulary word opens a TeachingCard:
+// a looping animated illustration that *shows* what the word means,
+// instead of just saying it out loud.
+
+// One twinkling sparkle, placed by hand inside a teaching illustration.
+struct Twinkle: View {
+    let x: CGFloat
+    let y: CGFloat
+    let size: CGFloat
+    let delay: Double
+    @State private var on = false
+
+    var body: some View {
+        Text("✨")
+            .font(.system(size: size))
+            .opacity(on ? 1 : 0.15)
+            .position(x: x, y: y)
+            .onAppear {
+                DispatchQueue.main.asyncAfter(deadline: .now() + delay) { on = true }
+            }
+            .animation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true), value: on)
+    }
+}
+
+// Dashain, the festival itself: kites dancing in the sky.
+struct DashainArt: View {
+    @State private var fly = false
+
+    var body: some View {
+        ZStack {
+            Text("🪁")
+                .font(.system(size: 64))
+                .offset(x: fly ? 40 : -40, y: fly ? -30 : 10)
+                .rotationEffect(.degrees(fly ? 12 : -12))
+            Text("🎉")
+                .font(.system(size: 54))
+                .offset(x: -50, y: 30)
+                .scaleEffect(fly ? 1.15 : 0.95)
+            Twinkle(x: 200, y: 40, size: 26, delay: 0)
+            Twinkle(x: 60, y: 120, size: 22, delay: 0.5)
+            Twinkle(x: 230, y: 120, size: 20, delay: 0.9)
+        }
+        .frame(width: 260, height: 170)
+        .onAppear { fly = true }
+        .animation(.easeInOut(duration: 2.2).repeatForever(autoreverses: true), value: fly)
+    }
+}
+
+// Tika: the red blessing mark stamps onto a forehead, with sparkles.
+struct TikaArt: View {
+    @State private var stamp = false
+
+    var body: some View {
+        ZStack {
+            Text("🙂").font(.system(size: 110))
+            Circle()
+                .fill(.red)
+                .frame(width: 22, height: 22)
+                .offset(y: stamp ? -32 : -110)
+            Twinkle(x: 170, y: 60, size: 24, delay: 0.2)
+            Twinkle(x: 90, y: 70, size: 20, delay: 0.7)
+        }
+        .frame(width: 260, height: 170)
+        .onAppear { stamp = true }
+        .animation(.easeInOut(duration: 1.6).repeatForever(autoreverses: true), value: stamp)
+    }
+}
+
+// Jamara: barley sprouts growing out of the soil, one after another.
+struct JamaraArt: View {
+    @State private var grow = false
+
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 8)
+                .fill(Color(red: 0.5, green: 0.35, blue: 0.22))
+                .frame(width: 180, height: 18)
+                .offset(y: 60)
+            ForEach(0..<3) { i in
+                Text("🌱")
+                    .font(.system(size: 54))
+                    .offset(x: CGFloat(i - 1) * 55, y: 10)
+                    .scaleEffect(grow ? 1 : 0.25, anchor: .bottom)
+                    .animation(
+                        .easeInOut(duration: 1.4).delay(Double(i) * 0.35)
+                            .repeatForever(autoreverses: true),
+                        value: grow
+                    )
+            }
+        }
+        .frame(width: 260, height: 170)
+        .onAppear { grow = true }
+    }
+}
+
+// Ping: the bamboo swing, swinging big with a rider.
+struct PingArt: View {
+    @State private var swing = false
+
+    var body: some View {
+        ZStack {
+            ZStack {
+                SwingDrawing().scaleEffect(1.3)
+                Text("🧒").font(.system(size: 40)).offset(y: -8)
+            }
+            .rotationEffect(.degrees(swing ? 24 : -24), anchor: .top)
+            .offset(y: -10)
+        }
+        .frame(width: 260, height: 170)
+        .onAppear { swing = true }
+        .animation(.easeInOut(duration: 1.1).repeatForever(autoreverses: true), value: swing)
+    }
+}
+
+// Changa: the kite soaring high past the clouds.
+struct ChangaArt: View {
+    @State private var soar = false
+
+    var body: some View {
+        ZStack {
+            Ellipse().fill(.white.opacity(0.9)).frame(width: 90, height: 30).offset(x: -70, y: -50)
+            Ellipse().fill(.white.opacity(0.9)).frame(width: 70, height: 24).offset(x: 60, y: 40)
+            Text("🪁")
+                .font(.system(size: 84))
+                .offset(x: soar ? 30 : -30, y: soar ? -40 : 20)
+                .rotationEffect(.degrees(soar ? 14 : -10))
+            Twinkle(x: 210, y: 130, size: 22, delay: 0.4)
+        }
+        .frame(width: 260, height: 170)
+        .onAppear { soar = true }
+        .animation(.easeInOut(duration: 2.4).repeatForever(autoreverses: true), value: soar)
+    }
+}
+
+// Ghatasthapana, day one: the kalash with jamara sprouting as the sun rises.
+struct GhatasthapanaArt: View {
+    @State private var grow = false
+
+    var body: some View {
+        ZStack {
+            Circle().fill(.yellow).frame(width: 44, height: 44)
+                .offset(x: 80, y: grow ? -50 : -20)
+            Text("🏺").font(.system(size: 80)).offset(y: 25)
+            Text("🌱").font(.system(size: 44)).offset(y: -8)
+                .scaleEffect(grow ? 1 : 0.3, anchor: .bottom)
+        }
+        .frame(width: 260, height: 170)
+        .onAppear { grow = true }
+        .animation(.easeInOut(duration: 2).repeatForever(autoreverses: true), value: grow)
+    }
+}
+
+// Ashirbad: blessings — folded hands, hearts rising with warm wishes.
+struct AshirbadArt: View {
+    @State private var bless = false
+
+    var body: some View {
+        ZStack {
+            Circle().fill(.yellow.opacity(0.25)).frame(width: 150, height: 150)
+            Text("🙏").font(.system(size: 84))
+            ForEach(0..<3) { i in
+                Text("💛")
+                    .font(.system(size: 26))
+                    .offset(x: CGFloat(i - 1) * 40, y: bless ? -70 : -10)
+                    .opacity(bless ? 0 : 1)
+                    .animation(
+                        .easeInOut(duration: 1.8).delay(Double(i) * 0.3)
+                            .repeatForever(autoreverses: true),
+                        value: bless
+                    )
+            }
+            Text("🙂").font(.system(size: 54)).offset(y: 55)
+        }
+        .frame(width: 260, height: 170)
+        .onAppear { bless = true }
+    }
+}
+
+// Bhoj: the festival feast, steaming hot.
+struct BhojArt: View {
+    @State private var steam = false
+
+    var body: some View {
+        ZStack {
+            Text("🍛").font(.system(size: 100))
+            ForEach(0..<3) { i in
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(.white.opacity(0.7))
+                    .frame(width: 10, height: 34)
+                    .blur(radius: 4)
+                    .offset(x: CGFloat(i - 1) * 26, y: steam ? -78 : -38)
+                    .opacity(steam ? 0 : 0.8)
+                    .animation(
+                        .easeOut(duration: 1.6).delay(Double(i) * 0.4)
+                            .repeatForever(autoreverses: false),
+                        value: steam
+                    )
+            }
+        }
+        .frame(width: 260, height: 170)
+        .onAppear { steam = true }
+    }
+}
+
+// Tihar, the festival of lights: diyos lighting up one by one.
+struct TiharArt: View {
+    @State private var lit = false
+
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 20)
+                .fill(Color(red: 0.08, green: 0.08, blue: 0.18))
+                .frame(width: 240, height: 150)
+            HStack(spacing: 8) {
+                ForEach(0..<5) { i in
+                    Text("🪔")
+                        .font(.system(size: 34))
+                        .grayscale(lit ? 0 : 1)
+                        .opacity(lit ? 1 : 0.45)
+                        .shadow(color: lit ? .orange : .clear, radius: lit ? 10 : 0)
+                        .animation(
+                            .easeIn(duration: 0.5).delay(Double(i) * 0.4)
+                                .repeatForever(autoreverses: true),
+                            value: lit
+                        )
+                }
+            }
+            Twinkle(x: 40, y: 30, size: 20, delay: 0.3)
+            Twinkle(x: 220, y: 40, size: 22, delay: 0.8)
+        }
+        .frame(width: 260, height: 170)
+        .onAppear { lit = true }
+    }
+}
+
+// Diyo: a clay lamp catching its flame.
+struct DiyoArt: View {
+    @State private var flicker = false
+
+    var body: some View {
+        ZStack {
+            Circle().fill(.orange.opacity(0.25)).frame(width: 130, height: 130)
+            Text("🪔").font(.system(size: 96))
+            Text("🔥")
+                .font(.system(size: 40))
+                .offset(y: -52)
+                .scaleEffect(flicker ? 1.15 : 0.9)
+                .opacity(flicker ? 1 : 0.75)
+        }
+        .frame(width: 260, height: 170)
+        .onAppear { flicker = true }
+        .animation(.easeInOut(duration: 0.5).repeatForever(autoreverses: true), value: flicker)
+    }
+}
+
+// Sayapatri: marigolds blooming open.
+struct SayapatriArt: View {
+    @State private var bloom = false
+
+    var body: some View {
+        ZStack {
+            ForEach(0..<3) { i in
+                Text("🌼")
+                    .font(.system(size: 64))
+                    .offset(x: CGFloat(i - 1) * 62, y: CGFloat((i % 2) * 14 - 7))
+                    .scaleEffect(bloom ? 1 : 0.2)
+                    .rotationEffect(.degrees(bloom ? 0 : -40))
+                    .animation(
+                        .spring(response: 0.7, dampingFactor: 0.55).delay(Double(i) * 0.3)
+                            .repeatForever(autoreverses: true),
+                        value: bloom
+                    )
+            }
+        }
+        .frame(width: 260, height: 170)
+        .onAppear { bloom = true }
+    }
+}
+
+// Mala: loose marigolds dropping onto the string to form a garland.
+struct MalaArt: View {
+    @State private var string = false
+
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 3)
+                .fill(Color(red: 0.4, green: 0.25, blue: 0.15))
+                .frame(width: 200, height: 6)
+            HStack(spacing: 6) {
+                ForEach(0..<5) { _ in
+                    Text("🌼").font(.system(size: 40))
+                }
+            }
+            .offset(y: string ? 0 : -70)
+            .opacity(string ? 1 : 0)
+        }
+        .frame(width: 260, height: 170)
+        .onAppear { string = true }
+        .animation(.easeInOut(duration: 1.8).repeatForever(autoreverses: true), value: string)
+    }
+}
+
+// Kaag Tihar: the crow hops over to its bowl of rice.
+struct KaagArt: View {
+    @State private var feed = false
+
+    var body: some View {
+        ZStack {
+            Text("🐦‍⬛")
+                .font(.system(size: 84))
+                .offset(x: feed ? 30 : -60, y: -20)
+            Text("🍚")
+                .font(.system(size: 60))
+                .offset(x: 30, y: 45)
+                .scaleEffect(feed ? 1 : 0.01)
+        }
+        .frame(width: 260, height: 170)
+        .onAppear { feed = true }
+        .animation(.easeInOut(duration: 1.8).repeatForever(autoreverses: true), value: feed)
+    }
+}
+
+// Kukur Tihar: the dog gets its marigold garland and tika.
+struct KukurArt: View {
+    @State private var honor = false
+
+    var body: some View {
+        ZStack {
+            Text("🐕").font(.system(size: 100))
+            HStack(spacing: 2) {
+                ForEach(0..<4) { _ in
+                    Text("🌼").font(.system(size: 26))
+                }
+            }
+            .offset(y: honor ? 28 : -80)
+            Circle()
+                .fill(.red)
+                .frame(width: 14, height: 14)
+                .offset(y: honor ? -34 : -90)
+                .opacity(honor ? 1 : 0)
+        }
+        .frame(width: 260, height: 170)
+        .onAppear { honor = true }
+        .animation(.easeInOut(duration: 1.8).repeatForever(autoreverses: true), value: honor)
+    }
+}
+
+// Laxmi Puja: the lotus blooms between two diyos, coins rising.
+struct LaxmiArt: View {
+    @State private var worship = false
+
+    var body: some View {
+        ZStack {
+            Text("🪷")
+                .font(.system(size: 84))
+                .scaleEffect(worship ? 1 : 0.4, anchor: .bottom)
+            Text("🪔").font(.system(size: 40)).offset(x: -80, y: 30)
+                .shadow(color: .orange, radius: 8)
+            Text("🪔").font(.system(size: 40)).offset(x: 80, y: 30)
+                .shadow(color: .orange, radius: 8)
+            ForEach(0..<3) { i in
+                Text("🪙")
+                    .font(.system(size: 22))
+                    .offset(x: CGFloat(i - 1) * 36, y: worship ? -64 : -20)
+                    .opacity(worship ? 0 : 1)
+                    .animation(
+                        .easeIn(duration: 1.6).delay(Double(i) * 0.3)
+                            .repeatForever(autoreverses: false),
+                        value: worship
+                    )
+            }
+        }
+        .frame(width: 260, height: 170)
+        .onAppear { worship = true }
+    }
+}
+
+// Bhai Tika: the tika travels from sister to brother's forehead.
+struct BhaiTikaArt: View {
+    @State private var tika = false
+
+    var body: some View {
+        ZStack {
+            Text("👧").font(.system(size: 84)).offset(x: -55)
+            Text("👦").font(.system(size: 84)).offset(x: 55)
+            Circle()
+                .fill(.red)
+                .frame(width: 18, height: 18)
+                .offset(x: tika ? 55 : -55, y: -28)
+            Twinkle(x: 185, y: 55, size: 22, delay: 0.2)
+            Twinkle(x: 200, y: 80, size: 18, delay: 0.8)
+        }
+        .frame(width: 260, height: 170)
+        .onAppear { tika = true }
+        .animation(.easeInOut(duration: 1.8).repeatForever(autoreverses: true), value: tika)
+    }
+}
+
+// Deusi Bhailo: singing groups at the doorstep, music in the air.
+struct DeusiArt: View {
+    @State private var sing = false
+
+    var body: some View {
+        ZStack {
+            Text("🏠").font(.system(size: 92)).offset(x: 55, y: 20)
+            Text("🧑‍🤝‍🧑").font(.system(size: 64)).offset(x: -60, y: 30)
+            ForEach(0..<3) { i in
+                Text(["🎵", "🎶", "🎵"][i])
+                    .font(.system(size: 26))
+                    .offset(x: -60 + CGFloat(i - 1) * 30, y: sing ? -60 : 0)
+                    .opacity(sing ? 0 : 1)
+                    .animation(
+                        .easeOut(duration: 1.8).delay(Double(i) * 0.35)
+                            .repeatForever(autoreverses: false),
+                        value: sing
+                    )
+            }
+        }
+        .frame(width: 260, height: 170)
+        .onAppear { sing = true }
+    }
+}
+
+// Sel Roti: the golden ring frying in the pan, bubbles rising.
+struct SelRotiArt: View {
+    @State private var fry = false
+
+    var body: some View {
+        ZStack {
+            Ellipse().fill(Color(white: 0.2)).frame(width: 190, height: 60).offset(y: 40)
+            Circle()
+                .stroke(Color(red: 0.75, green: 0.5, blue: 0.2), lineWidth: 26)
+                .frame(width: 90, height: 90)
+                .scaleEffect(fry ? 1.06 : 1.0)
+            ForEach(0..<4) { i in
+                Circle()
+                    .fill(.white.opacity(0.6))
+                    .frame(width: 8, height: 8)
+                    .offset(x: CGFloat(i - 2) * 22, y: fry ? -30 : 30)
+                    .opacity(fry ? 0 : 0.8)
+                    .animation(
+                        .easeOut(duration: 1.4).delay(Double(i) * 0.25)
+                            .repeatForever(autoreverses: false),
+                        value: fry
+                    )
+            }
+        }
+        .frame(width: 260, height: 170)
+        .onAppear { fry = true }
+    }
+}
+
+// Picks the right animated illustration for a festival word.
+struct TeachingArt: View {
+    let wordId: String
+
+    var body: some View {
+        ZStack {
+            switch wordId {
+            case "dash_dashain": DashainArt()
+            case "dash_tika": TikaArt()
+            case "dash_jamara": JamaraArt()
+            case "dash_ping": PingArt()
+            case "dash_changa": ChangaArt()
+            case "dash_ghatasthapana": GhatasthapanaArt()
+            case "dash_ashirbad": AshirbadArt()
+            case "dash_bhoj": BhojArt()
+            case "tihar_tihar": TiharArt()
+            case "tihar_diyo": DiyoArt()
+            case "tihar_sayapatri": SayapatriArt()
+            case "tihar_mala": MalaArt()
+            case "tihar_kaag": KaagArt()
+            case "tihar_kukur": KukurArt()
+            case "tihar_laxmi": LaxmiArt()
+            case "tihar_bhaitika": BhaiTikaArt()
+            case "tihar_deusi": DeusiArt()
+            case "tihar_selroti": SelRotiArt()
+            default: Text("🎉").font(.system(size: 90))
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: 190)
+    }
+}
+
+// The "show me" card: the animation up top, the word, and a Hear-it button.
+// It says the word out loud as it opens.
+struct TeachingCard: View {
+    let word: Word
+    let onClose: () -> Void
+
+    var body: some View {
+        ZStack {
+            Color.black.opacity(0.45)
+                .ignoresSafeArea()
+                .onTapGesture(perform: onClose)
+            VStack(spacing: 10) {
+                TeachingArt(wordId: word.id)
+                Text(word.devanagari)
+                    .font(.system(size: 46, weight: .bold))
+                Text("\(word.romanized) — \(word.english)")
+                    .font(.headline)
+                    .multilineTextAlignment(.center)
+                if let example = word.exampleSentenceNp {
+                    Text("“\(example)”")
+                        .font(.subheadline)
+                        .italic()
+                        .foregroundStyle(.secondary)
+                }
+                HStack(spacing: 12) {
+                    Button {
+                        NepaliSpeaker.say(nepali: word.devanagari, romanized: word.romanized)
+                    } label: {
+                        Label("Hear it", systemImage: "speaker.wave.2.fill")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    Button("Done", action: onClose)
+                        .buttonStyle(.bordered)
+                }
+                .padding(.top, 4)
+            }
+            .padding(24)
+            .background(.regularMaterial)
+            .clipShape(RoundedRectangle(cornerRadius: 24))
+            .padding(.horizontal, 28)
+        }
+        .transition(.scale(scale: 0.9).combined(with: .opacity))
+        .onAppear {
+            NepaliSpeaker.say(nepali: word.devanagari, romanized: word.romanized)
+        }
+    }
+}
+
 // MARK: - Festival scene engine
 
 // The animated scene at the top of a festival page: a living diorama of
@@ -509,6 +1043,7 @@ func lessonDestination(for deck: Deck) -> some View {
 struct FestivalScene: View {
     let deck: Deck
     let config: FestivalConfig
+    @Binding var teachingWord: Word?   // set to open the "show me" card
 
     @State private var found: Set<String> = []
     @State private var lastWord: Word?
@@ -582,6 +1117,11 @@ struct FestivalScene: View {
                 }
             }
         }
+        .onChange(of: teachingWord == nil) { cardClosed in
+            // The card just closed: if that was the last treasure,
+            // now is the moment for the voice cheer + confetti.
+            if cardClosed { celebrateIfDone() }
+        }
         .frame(height: 340)
         .clipShape(RoundedRectangle(cornerRadius: 20))
         .overlay {
@@ -594,6 +1134,16 @@ struct FestivalScene: View {
                     }
             }
         }
+    }
+
+    // The win moment: voice cheer + confetti, exactly once. Called when the
+    // teaching card closes after the last treasure was found.
+    private func celebrateIfDone() {
+        guard found.count == config.hotspots.count, !celebrated else { return }
+        celebrated = true
+        WinFanfare.play()
+        showConfetti = false
+        DispatchQueue.main.async { showConfetti = true }
     }
 
     // One cloud: three overlapping white ellipses.
@@ -617,19 +1167,14 @@ struct FestivalScene: View {
         let isFound = found.contains(spot.id)
         return Button {
             guard let word else { return }
-            // Hear it, like every other tap-to-speak spot in the app.
-            NepaliSpeaker.say(nepali: word.devanagari, romanized: word.romanized)
             found.insert(spot.id)
             withAnimation(.spring(response: 0.35, dampingFactor: 0.6)) {
                 lastWord = word
             }
-            // Everything found: the win moment — voice cheer + confetti, once.
-            if found.count == config.hotspots.count, !celebrated {
-                celebrated = true
-                WinFanfare.play()
-                showConfetti = false
-                DispatchQueue.main.async { showConfetti = true }
-            }
+            // The teaching card opens: it shows what the word means and
+            // says it out loud. The win moment waits until the card closes
+            // so the confetti isn't hidden behind it.
+            teachingWord = word
         } label: {
             hotspotFace(spot, isFound: isFound)
                 .scaleEffect(isFound ? 1.18 : 1.0)
@@ -663,21 +1208,34 @@ struct FestivalScene: View {
 struct FestivalView: View {
     let deck: Deck
     @State private var player: AVPlayer?
+    @State private var teachingWord: Word?   // open word = show the "show me" card
 
     var body: some View {
         let config = FestivalConfig.forDeck(deck.id)
         ScrollView {
             VStack(spacing: 16) {
-                FestivalScene(deck: deck, config: config)
+                FestivalScene(deck: deck, config: config, teachingWord: $teachingWord)
+                    .padding(.horizontal)
+                Text("Tap a treasure in the scene — or tap any word below to see what it means ✨")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
                     .padding(.horizontal)
                 ForEach(deck.words) { word in
                     WordRow(word: word, onPlay: play(word:))
+                        .onTapGesture { teachingWord = word }
                 }
                 .padding(.horizontal)
             }
             .padding(.vertical)
         }
         .navigationTitle(deck.title)
+        .overlay {
+            if let word = teachingWord {
+                TeachingCard(word: word) { teachingWord = nil }
+            }
+        }
+        .animation(.spring(response: 0.35, dampingFactor: 0.8), value: teachingWord?.id)
     }
 
     /// Same as DeckView's: builds the full audio URL and plays it.
