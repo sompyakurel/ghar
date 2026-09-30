@@ -24,11 +24,14 @@ struct ContentView: View {
                     NavigationStack {
                         List(pack.decks) { deck in
                             NavigationLink(destination: DeckView(deck: deck)) {
-                                VStack(alignment: .leading) {
-                                    Text(deck.title).font(.headline)
-                                    Text("\(deck.words.count) words")
-                                        .font(.subheadline)
-                                        .foregroundStyle(.secondary)
+                                HStack(spacing: 12) {
+                                    DeckCover(deck: deck)
+                                    VStack(alignment: .leading) {
+                                        Text(deck.title).font(.headline)
+                                        Text("\(deck.words.count) words")
+                                            .font(.subheadline)
+                                            .foregroundStyle(.secondary)
+                                    }
                                 }
                             }
                         }
@@ -281,6 +284,35 @@ struct MissionDetailView: View {
         guard let url = URL(string: GharAPI.baseURLString + mission.audioUrl) else { return }
         player = AVPlayer(url: url)
         player?.play()
+    }
+}
+
+/// The deck's cover art in the Lessons list: loads from the backend
+/// through the same /images route as the animal photos.
+/// A deck without cover art just shows a book icon instead.
+struct DeckCover: View {
+    let deck: Deck
+
+    var body: some View {
+        Group {
+            if let cover = deck.coverImage, cover.hasPrefix("/") {
+                AsyncImage(url: URL(string: GharAPI.baseURLString + cover)) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image.resizable().scaledToFill()
+                    case .failure, .empty:
+                        Color.clear
+                    @unknown default:
+                        Color.clear
+                    }
+                }
+            } else {
+                Image(systemName: "book.fill")
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .frame(width: 64, height: 64)
+        .clipShape(RoundedRectangle(cornerRadius: 14))
     }
 }
 

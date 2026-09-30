@@ -24,6 +24,7 @@ struct Deck: Codable, Identifiable {
     let id: String
     let title: String
     let theme: String
+    let coverImage: String?      // optional deck cover art, e.g. "/images/nepal-v1/cover_food.jpg"
     let minAgeBand: String      // "seedling" | "explorer" | "rooted"
     let words: [Word]
 }

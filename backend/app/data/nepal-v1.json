@@ -4,6 +4,7 @@
     {
       "id": "alphabet",
       "title": "Alphabets",
+      "cover_image": "/images/nepal-v1/cover_alphabet.jpg",
       "theme": "alphabet",
       "min_age_band": "seedling",
       "words": [
@@ -455,9 +456,10 @@
     },
     {
       "id": "food",
+      "title": "Food",
+      "cover_image": "/images/nepal-v1/cover_food.jpg",
       "min_age_band": "seedling",
       "theme": "food",
-      "title": "Food",
       "words": [
         {
           "audio_url": "/audio/nepal-v1/food_momo_np.m4a",
@@ -601,9 +603,10 @@
     },
     {
       "id": "family",
+      "title": "Family",
+      "cover_image": "/images/nepal-v1/cover_family.jpg",
       "min_age_band": "seedling",
       "theme": "family",
-      "title": "Family",
       "words": [
         {
           "audio_url": "/audio/nepal-v1/fam_aama_np.m4a",
@@ -726,6 +729,7 @@
     {
       "id": "animals",
       "title": "Animals",
+      "cover_image": "/images/nepal-v1/anim_bagh.jpg",
       "theme": "animals",
       "min_age_band": "seedling",
       "words": [
