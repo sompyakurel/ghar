@@ -504,6 +504,37 @@ struct SwingDrawing: View {
     }
 }
 
+// Sel Roti hotspot: hand-drawn mini sel roti — lumpy golden ring with
+// crispy edges. (No sel roti emoji exists; the bagel one was confusing.)
+struct SelRotiDrawing: View {
+    var body: some View {
+        ZStack {
+            Circle()
+                .stroke(Color(red: 0.42, green: 0.24, blue: 0.1), lineWidth: 15)
+                .frame(width: 30, height: 30)
+            Circle()
+                .stroke(
+                    LinearGradient(
+                        colors: [Color(red: 0.88, green: 0.62, blue: 0.3),
+                                 Color(red: 0.7, green: 0.45, blue: 0.19)],
+                        startPoint: .topLeading, endPoint: .bottomTrailing),
+                    lineWidth: 12)
+                .frame(width: 30, height: 30)
+            Circle().fill(Color(red: 0.8, green: 0.55, blue: 0.26))
+                .frame(width: 13, height: 11).offset(x: -14, y: -7)
+            Circle().fill(Color(red: 0.72, green: 0.48, blue: 0.21))
+                .frame(width: 11, height: 12).offset(x: 13, y: 8)
+            Circle().fill(Color(red: 0.5, green: 0.3, blue: 0.13))
+                .frame(width: 4, height: 4).offset(x: 15, y: 0)
+            Circle().fill(Color(red: 0.93, green: 0.7, blue: 0.38))
+                .frame(width: 4, height: 4).offset(x: -11, y: 11)
+            Circle().fill(Color(red: 0.5, green: 0.3, blue: 0.13))
+                .frame(width: 3, height: 3).offset(x: 1, y: -15)
+        }
+        .frame(width: 46, height: 46)
+    }
+}
+
 // Where a Lessons row leads: festival decks open the animated scene,
 // plain word decks open the normal word list.
 @ViewBuilder
@@ -1248,6 +1279,9 @@ struct FestivalScene: View {
         if spot.id == "dash_ping" {
             SwingDrawing()
                 .modifier(HotspotMotionModifier(motion: spot.motion, anchor: .top))
+        } else if spot.id == "tihar_selroti" {
+            SelRotiDrawing()
+                .modifier(HotspotMotionModifier(motion: spot.motion))
         } else {
             let lit = !spot.startsUnlit || isFound
             Text(spot.emoji)
