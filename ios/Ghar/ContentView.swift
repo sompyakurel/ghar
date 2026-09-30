@@ -468,6 +468,11 @@ struct ConfettiBurst: View {
 /// - `AVAudioEngine` is Apple's pro-audio plumbing: attach a player node,
 ///   connect it to the speaker (mainMixerNode), schedule three buffers a
 ///   hair apart for the rising C-E-G arpeggio.
+/// - Format matching is LAW: a scheduled buffer's format must equal the
+///   player's output format exactly, or scheduleBuffer crashes. We ask the
+///   hardware for its format and synthesize in exactly that — the old
+///   hardcoded 44.1 kHz mono vs the simulator's 48 kHz hardware was the
+///   crash Xcode pointed at.
 /// - The engine lives in a `static var` so nothing throws it away
 ///   mid-chime — same reason the AVPlayer lives in @State elsewhere.
 /// - `engine.start()` runs on a background queue, never the main thread.
@@ -495,7 +500,24 @@ enum WinFanfare {
             engineHolder = engine
             let player = AVAudioPlayerNode()
             engine.attach(player)
-            engine.connect(player, to: engine.mainMixerNode, format: nil)
+
+            // THE FIX for the scheduleBuffer crash: that call has a hard
+            // rule — the buffer's format must match the player's output
+            // format EXACTLY. We used to synthesize 44.1 kHz mono while
+            // connecting with format:nil, letting the graph negotiate
+            // whatever the hardware wants (the simulator's Mac audio is
+            // typically 48 kHz). Mismatch = crash, right on the
+            // scheduleBuffer line — exactly where Xcode pointed.
+            // Now we ask the hardware what it speaks, connect with that
+            // explicit format, and synthesize our notes to match it.
+            let hardware = engine.outputNode.outputFormat(forBus: 0)
+            guard let format = AVAudioFormat(standardFormatWithSampleRate: hardware.sampleRate,
+                                             channels: hardware.channelCount) else {
+                if engineHolder === engine { engineHolder = nil }
+                return
+            }
+            engine.connect(player, to: engine.mainMixerNode, format: format)
+
             do {
                 try engine.start()
             } catch {
@@ -507,7 +529,7 @@ enum WinFanfare {
             // C5 -> E5 -> G5, each 0.12s apart: a rising major arpeggio.
             for (i, freq) in [523.25, 659.25, 783.99].enumerated() {
                 DispatchQueue.main.asyncAfter(deadline: .now() + Double(i) * 0.12) {
-                    player.scheduleBuffer(toneBuffer(frequency: freq), completionHandler: nil)
+                    player.scheduleBuffer(toneBuffer(frequency: freq, format: format), completionHandler: nil)
                 }
             }
 
@@ -519,18 +541,20 @@ enum WinFanfare {
         }
     }
 
-    /// One note: 0.18 seconds of sine wave with a fade-out envelope.
-    private static func toneBuffer(frequency: Double) -> AVAudioPCMBuffer {
-        let sampleRate = 44_100.0
+    /// One note: 0.18 seconds of sine wave with a fade-out envelope,
+    /// synthesized in the hardware's own format (see play()).
+    private static func toneBuffer(frequency: Double, format: AVAudioFormat) -> AVAudioPCMBuffer {
+        let sampleRate = format.sampleRate
         let frames = AVAudioFrameCount(sampleRate * 0.18)
-        let format = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 1)!
         let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frames)!
         buffer.frameLength = frames
-        let data = buffer.floatChannelData![0]
-        for i in 0..<Int(frames) {
-            let t = Double(i) / sampleRate
-            let envelope = 1.0 - Double(i) / Double(frames)
-            data[i] = Float(sin(2 * .pi * frequency * t) * envelope * 0.4)
+        for ch in 0..<Int(format.channelCount) {
+            let data = buffer.floatChannelData![ch]
+            for i in 0..<Int(frames) {
+                let t = Double(i) / sampleRate
+                let envelope = 1.0 - Double(i) / Double(frames)
+                data[i] = Float(sin(2 * .pi * frequency * t) * envelope * 0.4)
+            }
         }
         return buffer
     }
