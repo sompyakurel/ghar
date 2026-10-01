@@ -16,11 +16,11 @@
 
 /* Begin PBXFileReference section */
 		666666666666666666666666 /* Ghar.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Ghar.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		1A1A1A1A1A1A1A1A1A1A1A1A /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		777777777777777777777777 /* GharApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GharApp.swift; sourceTree = "<group>"; };
 		888888888888888888888888 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		999999999999999999999999 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
 		AAAAAAAAAAAAAAAAAAAAAAAA /* GharAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GharAPI.swift; sourceTree = "<group>"; };
+		1A1A1A1A1A1A1A1A1A1A1A1A /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */

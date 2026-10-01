@@ -1,6 +1,6 @@
 # Recording checklist — Ghar Nepal pack
 
-**92 clips to go**, 13 already done ✅ (marked below — skip those).
+**112 clips to go**, 13 already done ✅ (marked below — skip those).
 
 ## How to record
 
@@ -142,5 +142,28 @@
 - [ ] भाइटीका (bhai tika) — `tihar_bhaitika_np.m4a`
 - [ ] देउसी भैलो (deusi bhailo) — `tihar_deusi_np.m4a`
 - [ ] सेलरोटी (sel roti) — `tihar_selroti_np.m4a`
+
+## Daily Conversations (20)
+
+- [ ] नमस्ते (namaste) — `convo_namaste_np.m4a`
+- [ ] तपाईं कस्तो हुनुहुन्छ? (tapai kasto hunuhuncha?) — `convo_kasto_np.m4a`
+- [ ] म ठीक छु (ma thik chu) — `convo_thik_np.m4a`
+- [ ] धन्यवाद (dhanyabad) — `convo_dhanyabad_np.m4a`
+- [ ] माफ गर्नुहोस् (maaph garnus) — `convo_maaph_np.m4a`
+- [ ] फर्केर भेट्दौला (pharkera bhetdaula) — `convo_pharkera_np.m4a`
+- [ ] मेरो नाम सोम हो (mero naam Som ho) — `convo_mero_naam_np.m4a`
+- [ ] तपाईंको नाम के हो? (tapai ko naam k ho?) — `convo_tapai_naam_np.m4a`
+- [ ] तपाईंलाई भेटेर खुसी लाग्यो (tapai lai bhetera khushi lagyo) — `convo_bhetera_np.m4a`
+- [ ] तपाईं कति वर्ष हुनुभयो? (tapai kati barsa hunu bhayo?) — `convo_kati_barsa_np.m4a`
+- [ ] म दस वर्षको भएँ (ma das barsa ko bhaye) — `convo_barsa_bhaye_np.m4a`
+- [ ] तपाईं कति कक्षामा पढ्नुहुन्छ? (tapai kati class ma padhnu huncha?) — `convo_kati_class_np.m4a`
+- [ ] म पाँच कक्षामा पढ्छु (ma paanch class ma padhchu) — `convo_class_padhchu_np.m4a`
+- [ ] तपाईं कहाँ बस्नुहुन्छ? (tapai kaha basnu huncha?) — `convo_kaha_np.m4a`
+- [ ] म कोलम्बसमा बस्छु (ma Columbus ma baschu) — `convo_baschu_np.m4a`
+- [ ] आज मौसम कस्तो छ? (aaja mausam kasto cha?) — `convo_mausam_np.m4a`
+- [ ] खाना खानुभयो? (khana khanu bhayo?) — `convo_khana_np.m4a`
+- [ ] हजुर (hajur) — `convo_hajur_np.m4a`
+- [ ] होइन (hoina) — `convo_hoina_np.m4a`
+- [ ] राम्रो! (ramro!) — `convo_ramro_np.m4a`
 
 _Total to record: 92_

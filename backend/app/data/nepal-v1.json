@@ -456,10 +456,10 @@
     },
     {
       "id": "food",
-      "title": "Food",
-      "cover_image": "/images/nepal-v1/cover_food.jpg",
       "min_age_band": "seedling",
       "theme": "food",
+      "title": "Food",
+      "cover_image": "/images/nepal-v1/cover_food.jpg",
       "words": [
         {
           "audio_url": "/audio/nepal-v1/food_momo_np.m4a",
@@ -603,10 +603,10 @@
     },
     {
       "id": "family",
-      "title": "Family",
-      "cover_image": "/images/nepal-v1/cover_family.jpg",
       "min_age_band": "seedling",
       "theme": "family",
+      "title": "Family",
+      "cover_image": "/images/nepal-v1/cover_family.jpg",
       "words": [
         {
           "audio_url": "/audio/nepal-v1/fam_aama_np.m4a",
@@ -867,6 +867,216 @@
         }
       ]
     },
+  {
+    "id": "daily-conversations",
+    "title": "Daily Conversations",
+    "cover_image": "/images/nepal-v1/cover_conversations.jpg",
+    "theme": "convo",
+    "kind": "convo",
+    "min_age_band": "seedling",
+    "words": [
+      {
+        "id": "convo_namaste",
+        "devanagari": "नमस्ते",
+        "romanized": "namaste",
+        "english": "Hello! (palms together)",
+        "audio_url": "/audio/nepal-v1/convo_namaste_np.m4a",
+        "has_audio": false,
+        "section": "Greetings (अभिवादन)",
+        "breakdown": "One word: na-mas-te. Say it with your palms together 🙏 — it means hello and 'I respect you' at the same time."
+      },
+      {
+        "id": "convo_kasto",
+        "devanagari": "तपाईं कस्तो हुनुहुन्छ?",
+        "romanized": "tapai kasto hunuhuncha?",
+        "english": "How are you? (respectful)",
+        "audio_url": "/audio/nepal-v1/convo_kasto_np.m4a",
+        "has_audio": false,
+        "section": "Greetings (अभिवादन)",
+        "breakdown": "तपाईं (you, respectful) + कस्तो (how) + हुनुहुन्छ (are)"
+      },
+      {
+        "id": "convo_thik",
+        "devanagari": "म ठीक छु",
+        "romanized": "ma thik chu",
+        "english": "I'm fine",
+        "audio_url": "/audio/nepal-v1/convo_thik_np.m4a",
+        "has_audio": false,
+        "section": "Greetings (अभिवादन)",
+        "breakdown": "म (I) + ठीक (fine) + छु (am)"
+      },
+      {
+        "id": "convo_dhanyabad",
+        "devanagari": "धन्यवाद",
+        "romanized": "dhanyabad",
+        "english": "Thank you",
+        "audio_url": "/audio/nepal-v1/convo_dhanyabad_np.m4a",
+        "has_audio": false,
+        "section": "Greetings (अभिवादन)",
+        "breakdown": "धन्य (thanks) + वाद (words) — 'words of thanks'"
+      },
+      {
+        "id": "convo_maaph",
+        "devanagari": "माफ गर्नुहोस्",
+        "romanized": "maaph garnus",
+        "english": "Sorry / excuse me",
+        "audio_url": "/audio/nepal-v1/convo_maaph_np.m4a",
+        "has_audio": false,
+        "section": "Greetings (अभिवादन)",
+        "breakdown": "माफ (forgive) + गर्नुहोस् (please do)"
+      },
+      {
+        "id": "convo_pharkera",
+        "devanagari": "फर्केर भेट्दौला",
+        "romanized": "pharkera bhetdaula",
+        "english": "See you again soon!",
+        "audio_url": "/audio/nepal-v1/convo_pharkera_np.m4a",
+        "has_audio": false,
+        "section": "Greetings (अभिवादन)",
+        "breakdown": "फर्केर (returning) + भेट्दौला (we'll meet)"
+      },
+      {
+        "id": "convo_mero_naam",
+        "devanagari": "मेरो नाम सोम हो",
+        "romanized": "mero naam Som ho",
+        "english": "My name is Som",
+        "audio_url": "/audio/nepal-v1/convo_mero_naam_np.m4a",
+        "has_audio": false,
+        "section": "Getting to know (चिनजान)",
+        "breakdown": "मेरो (my) + नाम (name) + सोम (Som) + हो (is) — swap in YOUR name!"
+      },
+      {
+        "id": "convo_tapai_naam",
+        "devanagari": "तपाईंको नाम के हो?",
+        "romanized": "tapai ko naam k ho?",
+        "english": "What is your name?",
+        "audio_url": "/audio/nepal-v1/convo_tapai_naam_np.m4a",
+        "has_audio": false,
+        "section": "Getting to know (चिनजान)",
+        "breakdown": "तपाईंको (your) + नाम (name) + के (what) + हो (is)"
+      },
+      {
+        "id": "convo_bhetera",
+        "devanagari": "तपाईंलाई भेटेर खुसी लाग्यो",
+        "romanized": "tapai lai bhetera khushi lagyo",
+        "english": "Nice to meet you",
+        "audio_url": "/audio/nepal-v1/convo_bhetera_np.m4a",
+        "has_audio": false,
+        "section": "Getting to know (चिनजान)",
+        "breakdown": "तपाईंलाई (to you) + भेटेर (having met) + खुसी (happy) + लाग्यो (felt)"
+      },
+      {
+        "id": "convo_kati_barsa",
+        "devanagari": "तपाईं कति वर्ष हुनुभयो?",
+        "romanized": "tapai kati barsa hunu bhayo?",
+        "english": "How old are you? (respectful)",
+        "audio_url": "/audio/nepal-v1/convo_kati_barsa_np.m4a",
+        "has_audio": false,
+        "section": "Getting to know (चिनजान)",
+        "breakdown": "तपाईं (you) + कति (how many) + वर्ष (years) + हुनुभयो (became)"
+      },
+      {
+        "id": "convo_barsa_bhaye",
+        "devanagari": "म दस वर्षको भएँ",
+        "romanized": "ma das barsa ko bhaye",
+        "english": "I am ten years old",
+        "audio_url": "/audio/nepal-v1/convo_barsa_bhaye_np.m4a",
+        "has_audio": false,
+        "section": "Getting to know (चिनजान)",
+        "breakdown": "म (I) + दस (ten) + वर्षको (years old) + भएँ (became) — swap in YOUR age!"
+      },
+      {
+        "id": "convo_kati_class",
+        "devanagari": "तपाईं कति कक्षामा पढ्नुहुन्छ?",
+        "romanized": "tapai kati class ma padhnu huncha?",
+        "english": "What grade are you in? (respectful)",
+        "audio_url": "/audio/nepal-v1/convo_kati_class_np.m4a",
+        "has_audio": false,
+        "section": "Getting to know (चिनजान)",
+        "breakdown": "तपाईं (you) + कति (which) + कक्षामा (in class) + पढ्नुहुन्छ (study)"
+      },
+      {
+        "id": "convo_class_padhchu",
+        "devanagari": "म पाँच कक्षामा पढ्छु",
+        "romanized": "ma paanch class ma padhchu",
+        "english": "I am in fifth grade",
+        "audio_url": "/audio/nepal-v1/convo_class_padhchu_np.m4a",
+        "has_audio": false,
+        "section": "Getting to know (चिनजान)",
+        "breakdown": "म (I) + पाँच (five) + कक्षामा (in class) + पढ्छु (study) — swap in YOUR grade!"
+      },
+      {
+        "id": "convo_kaha",
+        "devanagari": "तपाईं कहाँ बस्नुहुन्छ?",
+        "romanized": "tapai kaha basnu huncha?",
+        "english": "Where do you live? (respectful)",
+        "audio_url": "/audio/nepal-v1/convo_kaha_np.m4a",
+        "has_audio": false,
+        "section": "Getting to know (चिनजान)",
+        "breakdown": "तपाईं (you) + कहाँ (where) + बस्नुहुन्छ (live)"
+      },
+      {
+        "id": "convo_baschu",
+        "devanagari": "म कोलम्बसमा बस्छु",
+        "romanized": "ma Columbus ma baschu",
+        "english": "I live in Columbus",
+        "audio_url": "/audio/nepal-v1/convo_baschu_np.m4a",
+        "has_audio": false,
+        "section": "Getting to know (चिनजान)",
+        "breakdown": "म (I) + कोलम्बसमा (in Columbus) + बस्छु (live) — swap in YOUR city!"
+      },
+      {
+        "id": "convo_mausam",
+        "devanagari": "आज मौसम कस्तो छ?",
+        "romanized": "aaja mausam kasto cha?",
+        "english": "How's the weather today?",
+        "audio_url": "/audio/nepal-v1/convo_mausam_np.m4a",
+        "has_audio": false,
+        "section": "Everyday small talk (दैनिक कुराकानी)",
+        "breakdown": "आज (today) + मौसम (weather) + कस्तो (how) + छ (is)"
+      },
+      {
+        "id": "convo_khana",
+        "devanagari": "खाना खानुभयो?",
+        "romanized": "khana khanu bhayo?",
+        "english": "Have you eaten?",
+        "audio_url": "/audio/nepal-v1/convo_khana_np.m4a",
+        "has_audio": false,
+        "section": "Everyday small talk (दैनिक कुराकानी)",
+        "breakdown": "खाना (food) + खानुभयो (did you eat) — Nepalis ask this the way others ask 'how are you'. Food is love!"
+      },
+      {
+        "id": "convo_hajur",
+        "devanagari": "हजुर",
+        "romanized": "hajur",
+        "english": "Yes (respectful)",
+        "audio_url": "/audio/nepal-v1/convo_hajur_np.m4a",
+        "has_audio": false,
+        "section": "Everyday small talk (दैनिक कुराकानी)",
+        "breakdown": "The respectful 'yes' — also how you answer when an elder calls your name."
+      },
+      {
+        "id": "convo_hoina",
+        "devanagari": "होइन",
+        "romanized": "hoina",
+        "english": "No",
+        "audio_url": "/audio/nepal-v1/convo_hoina_np.m4a",
+        "has_audio": false,
+        "section": "Everyday small talk (दैनिक कुराकानी)",
+        "breakdown": "The everyday 'no'. Short, useful, use it freely."
+      },
+      {
+        "id": "convo_ramro",
+        "devanagari": "राम्रो!",
+        "romanized": "ramro!",
+        "english": "Good! Nice!",
+        "audio_url": "/audio/nepal-v1/convo_ramro_np.m4a",
+        "has_audio": false,
+        "section": "Everyday small talk (दैनिक कुराकानी)",
+        "breakdown": "Good, nice, beautiful — the all-purpose compliment."
+      }
+    ]
+  },
   {
     "id": "dashain",
     "title": "Dashain",

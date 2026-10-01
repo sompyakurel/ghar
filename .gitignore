@@ -1,3 +1,11 @@
+# macOS
+.DS_Store
+
+# Python
 __pycache__/
 *.pyc
-.venv/
+*.pyo
+
+# Xcode user-specific state
+xcuserdata/
+*.xcuserstate

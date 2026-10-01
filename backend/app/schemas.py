@@ -26,6 +26,9 @@ class Word(BaseModel):
                                  # the app groups words by this, in file order
     example_sentence_np: str | None = None   # Romanized Nepali, e.g. "Mitho chha!"
     example_sentence_en: str | None = None   # "It's delicious!"
+    breakdown: str | None = None   # word-by-word gloss for phrases,
+                                   # e.g. "तपाईंको (your) + नाम (name)...";
+                                   # the app shows it on the teaching card
 
 
 class Deck(BaseModel):
@@ -37,7 +40,9 @@ class Deck(BaseModel):
                                     # the app shows it next to the deck title
     kind: str = "words"             # "words" = plain word list;
                                     # "festival" = animated festival experience
-                                    # (Dashain, Tihar); the app opens a scene
+                                    # (Dashain, Tihar); "convo" = animated
+                                    # conversation scene + practice game.
+                                    # The app picks the screen by this value.
     min_age_band: str = Field(
         default="seedling",
         description="seedling (5-8) | explorer (9-13) | rooted (14-20)",
