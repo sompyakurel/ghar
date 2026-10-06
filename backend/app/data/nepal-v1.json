@@ -12,7 +12,7 @@
           "audio_url": "/audio/nepal-v1/alpha_a_np.m4a",
           "devanagari": "अ",
           "english": "the vowel 'a' — like 'a' in 'about'",
-          "has_audio": false,
+          "has_audio": true,
           "id": "a",
           "romanized": "a",
           "section": "Vowels (स्वर)"
@@ -21,7 +21,7 @@
           "audio_url": "/audio/nepal-v1/alpha_aa_np.m4a",
           "devanagari": "आ",
           "english": "long 'aa' — like 'a' in 'father'",
-          "has_audio": false,
+          "has_audio": true,
           "id": "aa",
           "romanized": "aa",
           "section": "Vowels (स्वर)"
@@ -30,7 +30,7 @@
           "audio_url": "/audio/nepal-v1/alpha_i_np.m4a",
           "devanagari": "इ",
           "english": "short 'i' — like 'i' in 'bit'",
-          "has_audio": false,
+          "has_audio": true,
           "id": "i",
           "romanized": "i",
           "section": "Vowels (स्वर)"
@@ -39,7 +39,7 @@
           "audio_url": "/audio/nepal-v1/alpha_ee_np.m4a",
           "devanagari": "ई",
           "english": "long 'ee' — like 'ee' in 'feet'",
-          "has_audio": false,
+          "has_audio": true,
           "id": "ee",
           "romanized": "ee",
           "section": "Vowels (स्वर)"
@@ -48,7 +48,7 @@
           "audio_url": "/audio/nepal-v1/alpha_u_np.m4a",
           "devanagari": "उ",
           "english": "short 'u' — like 'u' in 'put'",
-          "has_audio": false,
+          "has_audio": true,
           "id": "u",
           "romanized": "u",
           "section": "Vowels (स्वर)"
@@ -57,7 +57,7 @@
           "audio_url": "/audio/nepal-v1/alpha_oo_np.m4a",
           "devanagari": "ऊ",
           "english": "long 'oo' — like 'oo' in 'moon'",
-          "has_audio": false,
+          "has_audio": true,
           "id": "oo",
           "romanized": "oo",
           "section": "Vowels (स्वर)"
@@ -66,7 +66,7 @@
           "audio_url": "/audio/nepal-v1/alpha_ri_np.m4a",
           "devanagari": "ऋ",
           "english": "'ri' — like 'ri' in 'river'",
-          "has_audio": false,
+          "has_audio": true,
           "id": "ri",
           "romanized": "ri",
           "section": "Vowels (स्वर)"
@@ -75,7 +75,7 @@
           "audio_url": "/audio/nepal-v1/alpha_e_np.m4a",
           "devanagari": "ए",
           "english": "'e' — like 'a' in 'cake'",
-          "has_audio": false,
+          "has_audio": true,
           "id": "e",
           "romanized": "e",
           "section": "Vowels (स्वर)"
@@ -84,7 +84,7 @@
           "audio_url": "/audio/nepal-v1/alpha_ai_np.m4a",
           "devanagari": "ऐ",
           "english": "'ai' — like 'i' in 'ice'",
-          "has_audio": false,
+          "has_audio": true,
           "id": "ai",
           "romanized": "ai",
           "section": "Vowels (स्वर)"
@@ -93,7 +93,7 @@
           "audio_url": "/audio/nepal-v1/alpha_o_np.m4a",
           "devanagari": "ओ",
           "english": "'o' — like 'o' in 'go'",
-          "has_audio": false,
+          "has_audio": true,
           "id": "o",
           "romanized": "o",
           "section": "Vowels (स्वर)"
@@ -102,7 +102,7 @@
           "audio_url": "/audio/nepal-v1/alpha_au_np.m4a",
           "devanagari": "औ",
           "english": "'au' — like 'ou' in 'house'",
-          "has_audio": false,
+          "has_audio": true,
           "id": "au",
           "romanized": "au",
           "section": "Vowels (स्वर)"
@@ -111,7 +111,7 @@
           "audio_url": "/audio/nepal-v1/alpha_am_np.m4a",
           "devanagari": "अं",
           "english": "nasal 'an' — 'a' hummed through the nose",
-          "has_audio": false,
+          "has_audio": true,
           "id": "am",
           "romanized": "am",
           "section": "Vowels (स्वर)"
@@ -120,7 +120,7 @@
           "audio_url": "/audio/nepal-v1/alpha_aha_np.m4a",
           "devanagari": "अः",
           "english": "'aha' — a breathy 'ah' with a soft puff",
-          "has_audio": false,
+          "has_audio": true,
           "id": "aha",
           "romanized": "aha",
           "section": "Vowels (स्वर)"
@@ -133,7 +133,8 @@
           "example_sentence_np": "Ka bata kagaj",
           "id": "ka",
           "romanized": "ka",
-          "section": "Consonants (व्यञ्जन)"
+          "section": "Consonants (व्यञ्जन)",
+          "has_audio": true
         },
         {
           "audio_url": "/audio/nepal-v1/alpha_kha_np.m4a",
@@ -143,7 +144,8 @@
           "example_sentence_np": "Kha bata khana",
           "id": "kha",
           "romanized": "kha",
-          "section": "Consonants (व्यञ्जन)"
+          "section": "Consonants (व्यञ्जन)",
+          "has_audio": true
         },
         {
           "audio_url": "/audio/nepal-v1/alpha_ga_np.m4a",
@@ -153,13 +155,14 @@
           "example_sentence_np": "Ga bata ghar",
           "id": "ga",
           "romanized": "ga",
-          "section": "Consonants (व्यञ्जन)"
+          "section": "Consonants (व्यञ्जन)",
+          "has_audio": true
         },
         {
           "audio_url": "/audio/nepal-v1/alpha_gha_np.m4a",
           "devanagari": "घ",
           "english": "breathy 'gha' — 'g' with a puff of air",
-          "has_audio": false,
+          "has_audio": true,
           "id": "gha",
           "romanized": "gha",
           "section": "Consonants (व्यञ्जन)"
@@ -168,7 +171,7 @@
           "audio_url": "/audio/nepal-v1/alpha_nga_np.m4a",
           "devanagari": "ङ",
           "english": "'nga' — like 'ng' in 'sing'",
-          "has_audio": false,
+          "has_audio": true,
           "id": "nga",
           "romanized": "nga",
           "section": "Consonants (व्यञ्जन)"
@@ -177,7 +180,7 @@
           "audio_url": "/audio/nepal-v1/alpha_cha_np.m4a",
           "devanagari": "च",
           "english": "'ch' as in 'chair'",
-          "has_audio": false,
+          "has_audio": true,
           "id": "cha",
           "romanized": "cha",
           "section": "Consonants (व्यञ्जन)"
@@ -186,7 +189,7 @@
           "audio_url": "/audio/nepal-v1/alpha_chha_np.m4a",
           "devanagari": "छ",
           "english": "breathy 'chha' — 'ch' with a puff of air",
-          "has_audio": false,
+          "has_audio": true,
           "id": "chha",
           "romanized": "chha",
           "section": "Consonants (व्यञ्जन)"
@@ -195,7 +198,7 @@
           "audio_url": "/audio/nepal-v1/alpha_ja_np.m4a",
           "devanagari": "ज",
           "english": "'j' as in 'jam'",
-          "has_audio": false,
+          "has_audio": true,
           "id": "ja",
           "romanized": "ja",
           "section": "Consonants (व्यञ्जन)"
@@ -204,7 +207,7 @@
           "audio_url": "/audio/nepal-v1/alpha_jha_np.m4a",
           "devanagari": "झ",
           "english": "breathy 'jha' — 'j' with a puff of air",
-          "has_audio": false,
+          "has_audio": true,
           "id": "jha",
           "romanized": "jha",
           "section": "Consonants (व्यञ्जन)"
@@ -213,7 +216,7 @@
           "audio_url": "/audio/nepal-v1/alpha_nya_np.m4a",
           "devanagari": "ञ",
           "english": "'nya' — like 'ni' in 'onion'",
-          "has_audio": false,
+          "has_audio": true,
           "id": "nya",
           "romanized": "nya",
           "section": "Consonants (व्यञ्जन)"
@@ -222,7 +225,7 @@
           "audio_url": "/audio/nepal-v1/alpha_tta_np.m4a",
           "devanagari": "ट",
           "english": "retroflex 'ta' — tongue curled back, a hard 't'",
-          "has_audio": false,
+          "has_audio": true,
           "id": "tta",
           "romanized": "tta",
           "section": "Consonants (व्यञ्जन)"
@@ -231,7 +234,7 @@
           "audio_url": "/audio/nepal-v1/alpha_ttha_np.m4a",
           "devanagari": "ठ",
           "english": "breathy retroflex 'tha' — curled tongue, puff of air",
-          "has_audio": false,
+          "has_audio": true,
           "id": "ttha",
           "romanized": "ttha",
           "section": "Consonants (व्यञ्जन)"
@@ -240,7 +243,7 @@
           "audio_url": "/audio/nepal-v1/alpha_dda_np.m4a",
           "devanagari": "ड",
           "english": "retroflex 'da' — tongue curled back",
-          "has_audio": false,
+          "has_audio": true,
           "id": "dda",
           "romanized": "dda",
           "section": "Consonants (व्यञ्जन)"
@@ -249,7 +252,7 @@
           "audio_url": "/audio/nepal-v1/alpha_ddha_np.m4a",
           "devanagari": "ढ",
           "english": "breathy retroflex 'dha' — curled tongue, puff of air",
-          "has_audio": false,
+          "has_audio": true,
           "id": "ddha",
           "romanized": "ddha",
           "section": "Consonants (व्यञ्जन)"
@@ -258,7 +261,7 @@
           "audio_url": "/audio/nepal-v1/alpha_nna_np.m4a",
           "devanagari": "ण",
           "english": "retroflex 'na' — tongue curled back",
-          "has_audio": false,
+          "has_audio": true,
           "id": "nna",
           "romanized": "nna",
           "section": "Consonants (व्यञ्जन)"
@@ -267,7 +270,7 @@
           "audio_url": "/audio/nepal-v1/alpha_ta_np.m4a",
           "devanagari": "त",
           "english": "dental 'ta' — tongue on teeth, like 't' in 'top'",
-          "has_audio": false,
+          "has_audio": true,
           "id": "ta",
           "romanized": "ta",
           "section": "Consonants (व्यञ्जन)"
@@ -276,7 +279,7 @@
           "audio_url": "/audio/nepal-v1/alpha_tha_np.m4a",
           "devanagari": "थ",
           "english": "breathy 'tha' — 't' with a puff of air",
-          "has_audio": false,
+          "has_audio": true,
           "id": "tha",
           "romanized": "tha",
           "section": "Consonants (व्यञ्जन)"
@@ -285,7 +288,7 @@
           "audio_url": "/audio/nepal-v1/alpha_da_np.m4a",
           "devanagari": "द",
           "english": "dental 'da' — like 'd' in 'dog'",
-          "has_audio": false,
+          "has_audio": true,
           "id": "da",
           "romanized": "da",
           "section": "Consonants (व्यञ्जन)"
@@ -294,7 +297,7 @@
           "audio_url": "/audio/nepal-v1/alpha_dha_np.m4a",
           "devanagari": "ध",
           "english": "breathy 'dha' — 'd' with a puff of air",
-          "has_audio": false,
+          "has_audio": true,
           "id": "dha",
           "romanized": "dha",
           "section": "Consonants (व्यञ्जन)"
@@ -303,7 +306,7 @@
           "audio_url": "/audio/nepal-v1/alpha_na_np.m4a",
           "devanagari": "न",
           "english": "'n' as in 'no'",
-          "has_audio": false,
+          "has_audio": true,
           "id": "na",
           "romanized": "na",
           "section": "Consonants (व्यञ्जन)"
@@ -312,7 +315,7 @@
           "audio_url": "/audio/nepal-v1/alpha_pa_np.m4a",
           "devanagari": "प",
           "english": "'p' as in 'pen'",
-          "has_audio": false,
+          "has_audio": true,
           "id": "pa",
           "romanized": "pa",
           "section": "Consonants (व्यञ्जन)"
@@ -321,7 +324,7 @@
           "audio_url": "/audio/nepal-v1/alpha_pha_np.m4a",
           "devanagari": "फ",
           "english": "breathy 'pha' — 'p' with a puff of air",
-          "has_audio": false,
+          "has_audio": true,
           "id": "pha",
           "romanized": "pha",
           "section": "Consonants (व्यञ्जन)"
@@ -330,7 +333,7 @@
           "audio_url": "/audio/nepal-v1/alpha_ba_np.m4a",
           "devanagari": "ब",
           "english": "'b' as in 'boy'",
-          "has_audio": false,
+          "has_audio": true,
           "id": "ba",
           "romanized": "ba",
           "section": "Consonants (व्यञ्जन)"
@@ -339,7 +342,7 @@
           "audio_url": "/audio/nepal-v1/alpha_bha_np.m4a",
           "devanagari": "भ",
           "english": "breathy 'bha' — 'b' with a puff of air",
-          "has_audio": false,
+          "has_audio": true,
           "id": "bha",
           "romanized": "bha",
           "section": "Consonants (व्यञ्जन)"
@@ -348,7 +351,7 @@
           "audio_url": "/audio/nepal-v1/alpha_ma_np.m4a",
           "devanagari": "म",
           "english": "'m' as in 'mom'",
-          "has_audio": false,
+          "has_audio": true,
           "id": "ma",
           "romanized": "ma",
           "section": "Consonants (व्यञ्जन)"
@@ -357,7 +360,7 @@
           "audio_url": "/audio/nepal-v1/alpha_ya_np.m4a",
           "devanagari": "य",
           "english": "'y' as in 'yes'",
-          "has_audio": false,
+          "has_audio": true,
           "id": "ya",
           "romanized": "ya",
           "section": "Consonants (व्यञ्जन)"
@@ -366,7 +369,7 @@
           "audio_url": "/audio/nepal-v1/alpha_ra_np.m4a",
           "devanagari": "र",
           "english": "trilled 'ra' — like the Spanish 'r'",
-          "has_audio": false,
+          "has_audio": true,
           "id": "ra",
           "romanized": "ra",
           "section": "Consonants (व्यञ्जन)"
@@ -375,7 +378,7 @@
           "audio_url": "/audio/nepal-v1/alpha_la_np.m4a",
           "devanagari": "ल",
           "english": "'l' as in 'love'",
-          "has_audio": false,
+          "has_audio": true,
           "id": "la",
           "romanized": "la",
           "section": "Consonants (व्यञ्जन)"
@@ -384,7 +387,7 @@
           "audio_url": "/audio/nepal-v1/alpha_wa_np.m4a",
           "devanagari": "व",
           "english": "'w' as in 'water'",
-          "has_audio": false,
+          "has_audio": true,
           "id": "wa",
           "romanized": "wa",
           "section": "Consonants (व्यञ्जन)"
@@ -393,7 +396,7 @@
           "audio_url": "/audio/nepal-v1/alpha_sha_np.m4a",
           "devanagari": "श",
           "english": "'sh' as in 'shoe' (tongue forward)",
-          "has_audio": false,
+          "has_audio": true,
           "id": "sha",
           "romanized": "sha",
           "section": "Consonants (व्यञ्जन)"
@@ -402,7 +405,7 @@
           "audio_url": "/audio/nepal-v1/alpha_ssha_np.m4a",
           "devanagari": "ष",
           "english": "'sh' as in 'shoe' (tongue curled back)",
-          "has_audio": false,
+          "has_audio": true,
           "id": "ssha",
           "romanized": "ssha",
           "section": "Consonants (व्यञ्जन)"
@@ -411,7 +414,7 @@
           "audio_url": "/audio/nepal-v1/alpha_sa_np.m4a",
           "devanagari": "स",
           "english": "'s' as in 'sun'",
-          "has_audio": false,
+          "has_audio": true,
           "id": "sa",
           "romanized": "sa",
           "section": "Consonants (व्यञ्जन)"
@@ -420,7 +423,7 @@
           "audio_url": "/audio/nepal-v1/alpha_ha_np.m4a",
           "devanagari": "ह",
           "english": "'h' as in 'hat'",
-          "has_audio": false,
+          "has_audio": true,
           "id": "ha",
           "romanized": "ha",
           "section": "Consonants (व्यञ्जन)"
@@ -429,7 +432,7 @@
           "audio_url": "/audio/nepal-v1/alpha_kshya_np.m4a",
           "devanagari": "क्ष",
           "english": "'kshya' — 'k' and 'sh' blended together",
-          "has_audio": false,
+          "has_audio": true,
           "id": "kshya",
           "romanized": "kshya",
           "section": "Consonants (व्यञ्जन)"
@@ -438,7 +441,7 @@
           "audio_url": "/audio/nepal-v1/alpha_tra_np.m4a",
           "devanagari": "त्र",
           "english": "'tra' — 't' and 'r' blended together",
-          "has_audio": false,
+          "has_audio": true,
           "id": "tra",
           "romanized": "tra",
           "section": "Consonants (व्यञ्जन)"
@@ -447,10 +450,359 @@
           "audio_url": "/audio/nepal-v1/alpha_gya_np.m4a",
           "devanagari": "ज्ञ",
           "english": "'gya' — 'g' and 'y' blended together",
-          "has_audio": false,
+          "has_audio": true,
           "id": "gya",
           "romanized": "gya",
           "section": "Consonants (व्यञ्जन)"
+        }
+      ]
+    },
+    {
+      "id": "numbers",
+      "title": "Numbers",
+      "cover_image": "/images/nepal-v1/cover_numbers.jpg",
+      "theme": "numbers",
+      "min_age_band": "seedling",
+      "words": [
+        {
+          "id": "num_ek",
+          "devanagari": "१",
+          "romanized": "ek",
+          "english": "one",
+          "audio_url": "/audio/nepal-v1/num_ek_np.m4a",
+          "has_audio": true
+        },
+        {
+          "id": "num_dui",
+          "devanagari": "२",
+          "romanized": "dui",
+          "english": "two",
+          "audio_url": "/audio/nepal-v1/num_dui_np.m4a",
+          "has_audio": true
+        },
+        {
+          "id": "num_tin",
+          "devanagari": "३",
+          "romanized": "tin",
+          "english": "three",
+          "audio_url": "/audio/nepal-v1/num_tin_np.m4a",
+          "has_audio": true
+        },
+        {
+          "id": "num_char",
+          "devanagari": "४",
+          "romanized": "char",
+          "english": "four",
+          "audio_url": "/audio/nepal-v1/num_char_np.m4a",
+          "has_audio": true
+        },
+        {
+          "id": "num_paanch",
+          "devanagari": "५",
+          "romanized": "paanch",
+          "english": "five",
+          "audio_url": "/audio/nepal-v1/num_paanch_np.m4a",
+          "has_audio": true
+        },
+        {
+          "id": "num_chha",
+          "devanagari": "६",
+          "romanized": "chha",
+          "english": "six",
+          "audio_url": "/audio/nepal-v1/num_chha_np.m4a",
+          "has_audio": true
+        },
+        {
+          "id": "num_saat",
+          "devanagari": "७",
+          "romanized": "saat",
+          "english": "seven",
+          "audio_url": "/audio/nepal-v1/num_saat_np.m4a",
+          "has_audio": true
+        },
+        {
+          "id": "num_aath",
+          "devanagari": "८",
+          "romanized": "aath",
+          "english": "eight",
+          "audio_url": "/audio/nepal-v1/num_aath_np.m4a",
+          "has_audio": true
+        },
+        {
+          "id": "num_nau",
+          "devanagari": "९",
+          "romanized": "nau",
+          "english": "nine",
+          "audio_url": "/audio/nepal-v1/num_nau_np.m4a",
+          "has_audio": true
+        },
+        {
+          "id": "num_das",
+          "devanagari": "१०",
+          "romanized": "das",
+          "english": "ten",
+          "audio_url": "/audio/nepal-v1/num_das_np.m4a",
+          "has_audio": true
+        },
+        {
+          "id": "num_eghara",
+          "devanagari": "११",
+          "romanized": "eghara",
+          "english": "eleven",
+          "audio_url": "/audio/nepal-v1/num_eghara_np.m4a",
+          "has_audio": true
+        },
+        {
+          "id": "num_bahra",
+          "devanagari": "१२",
+          "romanized": "bahra",
+          "english": "twelve",
+          "audio_url": "/audio/nepal-v1/num_bahra_np.m4a",
+          "has_audio": true
+        },
+        {
+          "id": "num_tehra",
+          "devanagari": "१३",
+          "romanized": "tehra",
+          "english": "thirteen",
+          "audio_url": "/audio/nepal-v1/num_tehra_np.m4a",
+          "has_audio": true
+        },
+        {
+          "id": "num_chaudha",
+          "devanagari": "१४",
+          "romanized": "chaudha",
+          "english": "fourteen",
+          "audio_url": "/audio/nepal-v1/num_chaudha_np.m4a",
+          "has_audio": true
+        },
+        {
+          "id": "num_pandhra",
+          "devanagari": "१५",
+          "romanized": "pandhra",
+          "english": "fifteen",
+          "audio_url": "/audio/nepal-v1/num_pandhra_np.m4a",
+          "has_audio": true
+        },
+        {
+          "id": "num_sohra",
+          "devanagari": "१६",
+          "romanized": "sohra",
+          "english": "sixteen",
+          "audio_url": "/audio/nepal-v1/num_sohra_np.m4a",
+          "has_audio": true
+        },
+        {
+          "id": "num_satra",
+          "devanagari": "१७",
+          "romanized": "satra",
+          "english": "seventeen",
+          "audio_url": "/audio/nepal-v1/num_satra_np.m4a",
+          "has_audio": true
+        },
+        {
+          "id": "num_athara",
+          "devanagari": "१८",
+          "romanized": "athara",
+          "english": "eighteen",
+          "audio_url": "/audio/nepal-v1/num_athara_np.m4a",
+          "has_audio": true
+        },
+        {
+          "id": "num_unnais",
+          "devanagari": "१९",
+          "romanized": "unnais",
+          "english": "nineteen",
+          "audio_url": "/audio/nepal-v1/num_unnais_np.m4a",
+          "has_audio": true
+        },
+        {
+          "id": "num_bis",
+          "devanagari": "२०",
+          "romanized": "bis",
+          "english": "twenty",
+          "audio_url": "/audio/nepal-v1/num_bis_np.m4a",
+          "has_audio": true
+        },
+        {
+          "id": "num_ekkais",
+          "devanagari": "२१",
+          "romanized": "ekkais",
+          "english": "twenty-one",
+          "audio_url": "/audio/nepal-v1/num_ekkais_np.m4a",
+          "has_audio": true
+        },
+        {
+          "id": "num_bais",
+          "devanagari": "२२",
+          "romanized": "bais",
+          "english": "twenty-two",
+          "audio_url": "/audio/nepal-v1/num_bais_np.m4a",
+          "has_audio": true
+        },
+        {
+          "id": "num_teis",
+          "devanagari": "२३",
+          "romanized": "teis",
+          "english": "twenty-three",
+          "audio_url": "/audio/nepal-v1/num_teis_np.m4a",
+          "has_audio": true
+        },
+        {
+          "id": "num_chaubis",
+          "devanagari": "२४",
+          "romanized": "chaubis",
+          "english": "twenty-four",
+          "audio_url": "/audio/nepal-v1/num_chaubis_np.m4a",
+          "has_audio": true
+        },
+        {
+          "id": "num_pachchis",
+          "devanagari": "२५",
+          "romanized": "pachchis",
+          "english": "twenty-five",
+          "audio_url": "/audio/nepal-v1/num_pachchis_np.m4a",
+          "has_audio": true
+        },
+        {
+          "id": "num_chhabbis",
+          "devanagari": "२६",
+          "romanized": "chhabbis",
+          "english": "twenty-six",
+          "audio_url": "/audio/nepal-v1/num_chhabbis_np.m4a",
+          "has_audio": true
+        },
+        {
+          "id": "num_sattais",
+          "devanagari": "२७",
+          "romanized": "sattais",
+          "english": "twenty-seven",
+          "audio_url": "/audio/nepal-v1/num_sattais_np.m4a",
+          "has_audio": true
+        },
+        {
+          "id": "num_aththais",
+          "devanagari": "२८",
+          "romanized": "aththais",
+          "english": "twenty-eight",
+          "audio_url": "/audio/nepal-v1/num_aththais_np.m4a",
+          "has_audio": true
+        },
+        {
+          "id": "num_unantis",
+          "devanagari": "२९",
+          "romanized": "unantis",
+          "english": "twenty-nine",
+          "audio_url": "/audio/nepal-v1/num_unantis_np.m4a",
+          "has_audio": true
+        },
+        {
+          "id": "num_tis",
+          "devanagari": "३०",
+          "romanized": "tis",
+          "english": "thirty",
+          "audio_url": "/audio/nepal-v1/num_tis_np.m4a",
+          "has_audio": true
+        }
+      ],
+      "kind": "numbers"
+    },
+    {
+      "id": "colors",
+      "title": "Colors",
+      "theme": "colors",
+      "min_age_band": "seedling",
+      "kind": "colors",
+      "words": [
+        {
+          "id": "color_rato",
+          "devanagari": "रातो",
+          "romanized": "rato",
+          "english": "red",
+          "audio_url": "/audio/nepal-v1/colors_rato_np.m4a",
+          "has_audio": true,
+          "color_hex": "#E53935"
+        },
+        {
+          "id": "color_nilo",
+          "devanagari": "निलो",
+          "romanized": "nilo",
+          "english": "blue",
+          "audio_url": "/audio/nepal-v1/colors_nilo_np.m4a",
+          "has_audio": true,
+          "color_hex": "#1E88E5"
+        },
+        {
+          "id": "color_hariyo",
+          "devanagari": "हरियो",
+          "romanized": "hariyo",
+          "english": "green",
+          "audio_url": "/audio/nepal-v1/colors_hariyo_np.m4a",
+          "has_audio": true,
+          "color_hex": "#43A047"
+        },
+        {
+          "id": "color_pahenlo",
+          "devanagari": "पहेँलो",
+          "romanized": "pahenlo",
+          "english": "yellow",
+          "audio_url": "/audio/nepal-v1/colors_pahenlo_np.m4a",
+          "has_audio": true,
+          "color_hex": "#FDD835"
+        },
+        {
+          "id": "color_kalo",
+          "devanagari": "कालो",
+          "romanized": "kalo",
+          "english": "black",
+          "audio_url": "/audio/nepal-v1/colors_kalo_np.m4a",
+          "has_audio": true,
+          "color_hex": "#212121"
+        },
+        {
+          "id": "color_seto",
+          "devanagari": "सेतो",
+          "romanized": "seto",
+          "english": "white",
+          "audio_url": "/audio/nepal-v1/colors_seto_np.m4a",
+          "has_audio": true,
+          "color_hex": "#FAFAFA"
+        },
+        {
+          "id": "color_suntala",
+          "devanagari": "सुन्तला",
+          "romanized": "suntala",
+          "english": "orange",
+          "audio_url": "/audio/nepal-v1/colors_suntala_np.m4a",
+          "has_audio": true,
+          "color_hex": "#FB8C00"
+        },
+        {
+          "id": "color_baijani",
+          "devanagari": "बैजनी",
+          "romanized": "baijani",
+          "english": "purple",
+          "audio_url": "/audio/nepal-v1/colors_baijani_np.m4a",
+          "has_audio": true,
+          "color_hex": "#8E24AA"
+        },
+        {
+          "id": "color_khairo",
+          "devanagari": "खैरो",
+          "romanized": "khairo",
+          "english": "brown",
+          "audio_url": "/audio/nepal-v1/colors_khairo_np.m4a",
+          "has_audio": true,
+          "color_hex": "#6D4C41"
+        },
+        {
+          "id": "color_gulabi",
+          "devanagari": "गुलाबी",
+          "romanized": "gulabi",
+          "english": "pink",
+          "audio_url": "/audio/nepal-v1/colors_gulabi_np.m4a",
+          "has_audio": true,
+          "color_hex": "#EC407A"
         }
       ]
     },
@@ -468,8 +820,9 @@
           "example_sentence_en": "It's delicious!",
           "example_sentence_np": "Mitho chha!",
           "id": "momo",
-          "image": "momo",
-          "romanized": "momo"
+          "image": "/images/nepal-v1/food_momo.jpg",
+          "romanized": "momo",
+          "has_audio": true
         },
         {
           "audio_url": "/audio/nepal-v1/food_dal_np.m4a",
@@ -478,8 +831,9 @@
           "example_sentence_en": "Let's eat dal bhat!",
           "example_sentence_np": "Dal bhat khau!",
           "id": "dal",
-          "image": "dal",
-          "romanized": "dal"
+          "image": "/images/nepal-v1/food_dal.jpg",
+          "romanized": "dal",
+          "has_audio": true
         },
         {
           "audio_url": "/audio/nepal-v1/food_bhat_np.m4a",
@@ -488,8 +842,9 @@
           "example_sentence_en": "Is the rice ready?",
           "example_sentence_np": "Bhat pakyo?",
           "id": "bhat",
-          "image": "bhat",
-          "romanized": "bhat"
+          "image": "/images/nepal-v1/food_bhat.jpg",
+          "romanized": "bhat",
+          "has_audio": true
         },
         {
           "audio_url": "/audio/nepal-v1/food_khana_np.m4a",
@@ -498,7 +853,9 @@
           "example_sentence_en": "Let's eat!",
           "example_sentence_np": "Khana khau!",
           "id": "khana",
-          "romanized": "khana"
+          "image": "/images/nepal-v1/food_khana.jpg",
+          "romanized": "khana",
+          "has_audio": true
         },
         {
           "audio_url": "/audio/nepal-v1/food_selroti_np.m4a",
@@ -507,8 +864,9 @@
           "example_sentence_en": "Sel roti at Tihar!",
           "example_sentence_np": "Tihar ma sel roti!",
           "id": "selroti",
-          "image": "selroti",
-          "romanized": "sel roti"
+          "image": "/images/nepal-v1/food_selroti.jpg",
+          "romanized": "sel roti",
+          "has_audio": true
         },
         {
           "audio_url": "/audio/nepal-v1/food_pani_np.m4a",
@@ -517,7 +875,9 @@
           "example_sentence_en": "Drink some water!",
           "example_sentence_np": "Pani piu!",
           "id": "pani",
-          "romanized": "pani"
+          "image": "/images/nepal-v1/food_pani.jpg",
+          "romanized": "pani",
+          "has_audio": true
         },
         {
           "audio_url": "/audio/nepal-v1/food_tarkari_np.m4a",
@@ -525,8 +885,9 @@
           "english": "vegetable curry",
           "example_sentence_en": "The curry is tasty!",
           "example_sentence_np": "Tarkari mitho chha!",
-          "has_audio": false,
+          "has_audio": true,
           "id": "tarkari",
+          "image": "/images/nepal-v1/food_tarkari.jpg",
           "romanized": "tarkari"
         },
         {
@@ -535,8 +896,9 @@
           "english": "meat",
           "example_sentence_en": "Do you eat meat?",
           "example_sentence_np": "Masu khanchhau?",
-          "has_audio": false,
+          "has_audio": true,
           "id": "masu",
+          "image": "/images/nepal-v1/food_masu.jpg",
           "romanized": "masu"
         },
         {
@@ -545,8 +907,9 @@
           "english": "egg",
           "example_sentence_en": "Boil an egg!",
           "example_sentence_np": "Anda usinou!",
-          "has_audio": false,
+          "has_audio": true,
           "id": "anda",
+          "image": "/images/nepal-v1/food_anda.jpg",
           "romanized": "anda"
         },
         {
@@ -555,8 +918,9 @@
           "english": "milk",
           "example_sentence_en": "Drink milk!",
           "example_sentence_np": "Doodh piu!",
-          "has_audio": false,
+          "has_audio": true,
           "id": "doodh",
+          "image": "/images/nepal-v1/food_doodh.jpg",
           "romanized": "doodh"
         },
         {
@@ -565,8 +929,9 @@
           "english": "sweets",
           "example_sentence_en": "Sweets are tasty!",
           "example_sentence_np": "Mithai mitho chha!",
-          "has_audio": false,
+          "has_audio": true,
           "id": "mithai",
+          "image": "/images/nepal-v1/food_mithai.jpg",
           "romanized": "mithai"
         },
         {
@@ -575,8 +940,9 @@
           "english": "leafy greens",
           "example_sentence_en": "Eat your greens!",
           "example_sentence_np": "Saag khau!",
-          "has_audio": false,
+          "has_audio": true,
           "id": "saag",
+          "image": "/images/nepal-v1/food_saag.jpg",
           "romanized": "saag"
         },
         {
@@ -585,8 +951,9 @@
           "english": "pickle",
           "example_sentence_en": "The pickle is spicy!",
           "example_sentence_np": "Achar piro chha!",
-          "has_audio": false,
+          "has_audio": true,
           "id": "achar",
+          "image": "/images/nepal-v1/food_achar.jpg",
           "romanized": "achar"
         },
         {
@@ -595,9 +962,28 @@
           "english": "tea",
           "example_sentence_en": "Make some tea!",
           "example_sentence_np": "Chiya banaou!",
-          "has_audio": false,
+          "has_audio": true,
           "id": "chiya",
+          "image": "/images/nepal-v1/food_chiya.jpg",
           "romanized": "chiya"
+        },
+        {
+          "id": "chatpate",
+          "devanagari": "चटपटे",
+          "romanized": "chatpate",
+          "english": "spicy tangy snack",
+          "audio_url": "/audio/nepal-v1/food_chatpate_np.m4a",
+          "has_audio": false,
+          "image": "/images/nepal-v1/food_chatpate.jpg"
+        },
+        {
+          "id": "chowmein",
+          "devanagari": "चाउमिन",
+          "romanized": "chowmein",
+          "english": "stir-fried noodles",
+          "audio_url": "/audio/nepal-v1/food_chowmein_np.m4a",
+          "has_audio": false,
+          "image": "/images/nepal-v1/food_chowmein.jpg"
         }
       ]
     },
@@ -615,7 +1001,9 @@
           "example_sentence_en": "Hello, mom!",
           "example_sentence_np": "Aama, namaste!",
           "id": "aama",
-          "romanized": "aama"
+          "image": "/images/nepal-v1/fam_aama.jpg",
+          "romanized": "aama",
+          "has_audio": true
         },
         {
           "audio_url": "/audio/nepal-v1/fam_baba_np.m4a",
@@ -624,7 +1012,9 @@
           "example_sentence_en": "Dad, where are you?",
           "example_sentence_np": "Baba, kaha ho?",
           "id": "baba",
-          "romanized": "baba"
+          "image": "/images/nepal-v1/fam_baba.jpg",
+          "romanized": "baba",
+          "has_audio": true
         },
         {
           "audio_url": "/audio/nepal-v1/fam_didi_np.m4a",
@@ -633,7 +1023,9 @@
           "example_sentence_en": "Sister, help me!",
           "example_sentence_np": "Didi, sahayog gara!",
           "id": "didi",
-          "romanized": "didi"
+          "image": "/images/nepal-v1/fam_didi.jpg",
+          "romanized": "didi",
+          "has_audio": true
         },
         {
           "audio_url": "/audio/nepal-v1/fam_dai_np.m4a",
@@ -642,7 +1034,9 @@
           "example_sentence_en": "Brother, let's play!",
           "example_sentence_np": "Dai, khelam!",
           "id": "dai",
-          "romanized": "dai"
+          "image": "/images/nepal-v1/fam_dai.jpg",
+          "romanized": "dai",
+          "has_audio": true
         },
         {
           "audio_url": "/audio/nepal-v1/fam_bahini_np.m4a",
@@ -650,8 +1044,9 @@
           "english": "younger sister",
           "example_sentence_en": "Little sister, let's play!",
           "example_sentence_np": "Bahini, khelam!",
-          "has_audio": false,
+          "has_audio": true,
           "id": "bahini",
+          "image": "/images/nepal-v1/fam_bahini.jpg",
           "romanized": "bahini"
         },
         {
@@ -660,8 +1055,9 @@
           "english": "younger brother",
           "example_sentence_en": "Little brother, come here!",
           "example_sentence_np": "Bhai, yeta aau!",
-          "has_audio": false,
+          "has_audio": true,
           "id": "bhai",
+          "image": "/images/nepal-v1/fam_bhai.jpg",
           "romanized": "bhai"
         },
         {
@@ -670,8 +1066,9 @@
           "english": "grandfather",
           "example_sentence_en": "Hello, grandpa!",
           "example_sentence_np": "Hajurbuwa, namaste!",
-          "has_audio": false,
+          "has_audio": true,
           "id": "hajurbuwa",
+          "image": "/images/nepal-v1/fam_hajurbuwa.jpg",
           "romanized": "hajurbuwa"
         },
         {
@@ -680,8 +1077,9 @@
           "english": "grandmother",
           "example_sentence_en": "Hello, grandma!",
           "example_sentence_np": "Hajuraama, namaste!",
-          "has_audio": false,
+          "has_audio": true,
           "id": "hajuraama",
+          "image": "/images/nepal-v1/fam_hajuraama.jpg",
           "romanized": "hajuraama"
         },
         {
@@ -690,8 +1088,9 @@
           "english": "uncle (dad's brother)",
           "example_sentence_en": "Hello, uncle!",
           "example_sentence_np": "Kaka, namaste!",
-          "has_audio": false,
+          "has_audio": true,
           "id": "kaka",
+          "image": "/images/nepal-v1/fam_kaka.jpg",
           "romanized": "kaka"
         },
         {
@@ -700,8 +1099,9 @@
           "english": "auntie (kaka's wife)",
           "example_sentence_en": "Hello, auntie!",
           "example_sentence_np": "Kaki, namaste!",
-          "has_audio": false,
+          "has_audio": true,
           "id": "kaki",
+          "image": "/images/nepal-v1/fam_kaki.jpg",
           "romanized": "kaki"
         },
         {
@@ -710,8 +1110,9 @@
           "english": "uncle (mom's brother)",
           "example_sentence_en": "Hello, uncle!",
           "example_sentence_np": "Mama, namaste!",
-          "has_audio": false,
+          "has_audio": true,
           "id": "mama",
+          "image": "/images/nepal-v1/fam_mama.jpg",
           "romanized": "mama"
         },
         {
@@ -720,8 +1121,9 @@
           "english": "auntie (mom's sister)",
           "example_sentence_en": "Hello, auntie!",
           "example_sentence_np": "Maiju, namaste!",
-          "has_audio": false,
+          "has_audio": true,
           "id": "maiju",
+          "image": "/images/nepal-v1/fam_maiju.jpg",
           "romanized": "maiju"
         }
       ]
@@ -739,7 +1141,7 @@
           "romanized": "kukur",
           "english": "dog",
           "audio_url": "/audio/nepal-v1/anim_kukur_np.m4a",
-          "has_audio": false,
+          "has_audio": true,
           "image": "/images/nepal-v1/anim_kukur.jpg",
           "example_sentence_np": "Kukur bhukchha.",
           "example_sentence_en": "The dog barks."
@@ -750,7 +1152,7 @@
           "romanized": "biralo",
           "english": "cat",
           "audio_url": "/audio/nepal-v1/anim_biralo_np.m4a",
-          "has_audio": false,
+          "has_audio": true,
           "image": "/images/nepal-v1/anim_biralo.jpg",
           "example_sentence_np": "Biralo doodh piuchha.",
           "example_sentence_en": "The cat drinks milk."
@@ -761,7 +1163,7 @@
           "romanized": "gaai",
           "english": "cow",
           "audio_url": "/audio/nepal-v1/anim_gaai_np.m4a",
-          "has_audio": false,
+          "has_audio": true,
           "image": "/images/nepal-v1/anim_gaai.jpg",
           "example_sentence_np": "Gaai ghaans khaanchha.",
           "example_sentence_en": "The cow eats grass."
@@ -772,7 +1174,7 @@
           "romanized": "bagh",
           "english": "tiger",
           "audio_url": "/audio/nepal-v1/anim_bagh_np.m4a",
-          "has_audio": false,
+          "has_audio": true,
           "image": "/images/nepal-v1/anim_bagh.jpg",
           "example_sentence_np": "Bagh jangal ma baschha.",
           "example_sentence_en": "The tiger lives in the jungle."
@@ -783,7 +1185,7 @@
           "romanized": "haatti",
           "english": "elephant",
           "audio_url": "/audio/nepal-v1/anim_haatti_np.m4a",
-          "has_audio": false,
+          "has_audio": true,
           "image": "/images/nepal-v1/anim_haatti.jpg",
           "example_sentence_np": "Haatti thulo chha.",
           "example_sentence_en": "The elephant is big."
@@ -794,7 +1196,7 @@
           "romanized": "baandar",
           "english": "monkey",
           "audio_url": "/audio/nepal-v1/anim_baandar_np.m4a",
-          "has_audio": false,
+          "has_audio": true,
           "image": "/images/nepal-v1/anim_baandar.jpg",
           "example_sentence_np": "Baandar rukh ma chadhchha.",
           "example_sentence_en": "The monkey climbs the tree."
@@ -805,7 +1207,7 @@
           "romanized": "chara",
           "english": "bird",
           "audio_url": "/audio/nepal-v1/anim_chara_np.m4a",
-          "has_audio": false,
+          "has_audio": true,
           "image": "/images/nepal-v1/anim_chara.jpg",
           "example_sentence_np": "Chara aakaash ma udchha.",
           "example_sentence_en": "The bird flies in the sky."
@@ -816,7 +1218,7 @@
           "romanized": "maachha",
           "english": "fish",
           "audio_url": "/audio/nepal-v1/anim_maachha_np.m4a",
-          "has_audio": false,
+          "has_audio": true,
           "image": "/images/nepal-v1/anim_maachha.jpg",
           "example_sentence_np": "Maachha paani ma paudinchha.",
           "example_sentence_en": "The fish swims in the water."
@@ -827,7 +1229,7 @@
           "romanized": "ghoda",
           "english": "horse",
           "audio_url": "/audio/nepal-v1/anim_ghoda_np.m4a",
-          "has_audio": false,
+          "has_audio": true,
           "image": "/images/nepal-v1/anim_ghoda.jpg",
           "example_sentence_np": "Ghoda daudinchha.",
           "example_sentence_en": "The horse runs."
@@ -838,7 +1240,7 @@
           "romanized": "bakhra",
           "english": "goat",
           "audio_url": "/audio/nepal-v1/anim_bakhra_np.m4a",
-          "has_audio": false,
+          "has_audio": true,
           "image": "/images/nepal-v1/anim_bakhra.jpg",
           "example_sentence_np": "Bakhra ghaans khaanchha.",
           "example_sentence_en": "The goat eats grass."
@@ -849,7 +1251,7 @@
           "romanized": "bhainsi",
           "english": "buffalo",
           "audio_url": "/audio/nepal-v1/anim_bhainsi_np.m4a",
-          "has_audio": false,
+          "has_audio": true,
           "image": "/images/nepal-v1/anim_bhainsi.jpg",
           "example_sentence_np": "Bhainsi kheth ma kaam garchha.",
           "example_sentence_en": "The buffalo works in the field."
@@ -860,423 +1262,635 @@
           "romanized": "kharayo",
           "english": "rabbit",
           "audio_url": "/audio/nepal-v1/anim_kharayo_np.m4a",
-          "has_audio": false,
+          "has_audio": true,
           "image": "/images/nepal-v1/anim_kharayo.jpg",
           "example_sentence_np": "Kharayo chaadai daudinchha.",
           "example_sentence_en": "The rabbit runs fast."
         }
       ]
     },
-  {
-    "id": "daily-conversations",
-    "title": "Daily Conversations",
-    "cover_image": "/images/nepal-v1/cover_conversations.jpg",
-    "theme": "convo",
-    "kind": "convo",
-    "min_age_band": "seedling",
-    "words": [
-      {
-        "id": "convo_namaste",
-        "devanagari": "नमस्ते",
-        "romanized": "namaste",
-        "english": "Hello! (palms together)",
-        "audio_url": "/audio/nepal-v1/convo_namaste_np.m4a",
-        "has_audio": false,
-        "section": "Greetings (अभिवादन)",
-        "breakdown": "One word: na-mas-te. Say it with your palms together 🙏 — it means hello and 'I respect you' at the same time."
-      },
-      {
-        "id": "convo_kasto",
-        "devanagari": "तपाईं कस्तो हुनुहुन्छ?",
-        "romanized": "tapai kasto hunuhuncha?",
-        "english": "How are you? (respectful)",
-        "audio_url": "/audio/nepal-v1/convo_kasto_np.m4a",
-        "has_audio": false,
-        "section": "Greetings (अभिवादन)",
-        "breakdown": "तपाईं (you, respectful) + कस्तो (how) + हुनुहुन्छ (are)"
-      },
-      {
-        "id": "convo_thik",
-        "devanagari": "म ठीक छु",
-        "romanized": "ma thik chu",
-        "english": "I'm fine",
-        "audio_url": "/audio/nepal-v1/convo_thik_np.m4a",
-        "has_audio": false,
-        "section": "Greetings (अभिवादन)",
-        "breakdown": "म (I) + ठीक (fine) + छु (am)"
-      },
-      {
-        "id": "convo_dhanyabad",
-        "devanagari": "धन्यवाद",
-        "romanized": "dhanyabad",
-        "english": "Thank you",
-        "audio_url": "/audio/nepal-v1/convo_dhanyabad_np.m4a",
-        "has_audio": false,
-        "section": "Greetings (अभिवादन)",
-        "breakdown": "धन्य (thanks) + वाद (words) — 'words of thanks'"
-      },
-      {
-        "id": "convo_maaph",
-        "devanagari": "माफ गर्नुहोस्",
-        "romanized": "maaph garnus",
-        "english": "Sorry / excuse me",
-        "audio_url": "/audio/nepal-v1/convo_maaph_np.m4a",
-        "has_audio": false,
-        "section": "Greetings (अभिवादन)",
-        "breakdown": "माफ (forgive) + गर्नुहोस् (please do)"
-      },
-      {
-        "id": "convo_pharkera",
-        "devanagari": "फर्केर भेट्दौला",
-        "romanized": "pharkera bhetdaula",
-        "english": "See you again soon!",
-        "audio_url": "/audio/nepal-v1/convo_pharkera_np.m4a",
-        "has_audio": false,
-        "section": "Greetings (अभिवादन)",
-        "breakdown": "फर्केर (returning) + भेट्दौला (we'll meet)"
-      },
-      {
-        "id": "convo_mero_naam",
-        "devanagari": "मेरो नाम सोम हो",
-        "romanized": "mero naam Som ho",
-        "english": "My name is Som",
-        "audio_url": "/audio/nepal-v1/convo_mero_naam_np.m4a",
-        "has_audio": false,
-        "section": "Getting to know (चिनजान)",
-        "breakdown": "मेरो (my) + नाम (name) + सोम (Som) + हो (is) — swap in YOUR name!"
-      },
-      {
-        "id": "convo_tapai_naam",
-        "devanagari": "तपाईंको नाम के हो?",
-        "romanized": "tapai ko naam k ho?",
-        "english": "What is your name?",
-        "audio_url": "/audio/nepal-v1/convo_tapai_naam_np.m4a",
-        "has_audio": false,
-        "section": "Getting to know (चिनजान)",
-        "breakdown": "तपाईंको (your) + नाम (name) + के (what) + हो (is)"
-      },
-      {
-        "id": "convo_bhetera",
-        "devanagari": "तपाईंलाई भेटेर खुसी लाग्यो",
-        "romanized": "tapai lai bhetera khushi lagyo",
-        "english": "Nice to meet you",
-        "audio_url": "/audio/nepal-v1/convo_bhetera_np.m4a",
-        "has_audio": false,
-        "section": "Getting to know (चिनजान)",
-        "breakdown": "तपाईंलाई (to you) + भेटेर (having met) + खुसी (happy) + लाग्यो (felt)"
-      },
-      {
-        "id": "convo_kati_barsa",
-        "devanagari": "तपाईं कति वर्ष हुनुभयो?",
-        "romanized": "tapai kati barsa hunu bhayo?",
-        "english": "How old are you? (respectful)",
-        "audio_url": "/audio/nepal-v1/convo_kati_barsa_np.m4a",
-        "has_audio": false,
-        "section": "Getting to know (चिनजान)",
-        "breakdown": "तपाईं (you) + कति (how many) + वर्ष (years) + हुनुभयो (became)"
-      },
-      {
-        "id": "convo_barsa_bhaye",
-        "devanagari": "म दस वर्षको भएँ",
-        "romanized": "ma das barsa ko bhaye",
-        "english": "I am ten years old",
-        "audio_url": "/audio/nepal-v1/convo_barsa_bhaye_np.m4a",
-        "has_audio": false,
-        "section": "Getting to know (चिनजान)",
-        "breakdown": "म (I) + दस (ten) + वर्षको (years old) + भएँ (became) — swap in YOUR age!"
-      },
-      {
-        "id": "convo_kati_class",
-        "devanagari": "तपाईं कति कक्षामा पढ्नुहुन्छ?",
-        "romanized": "tapai kati class ma padhnu huncha?",
-        "english": "What grade are you in? (respectful)",
-        "audio_url": "/audio/nepal-v1/convo_kati_class_np.m4a",
-        "has_audio": false,
-        "section": "Getting to know (चिनजान)",
-        "breakdown": "तपाईं (you) + कति (which) + कक्षामा (in class) + पढ्नुहुन्छ (study)"
-      },
-      {
-        "id": "convo_class_padhchu",
-        "devanagari": "म पाँच कक्षामा पढ्छु",
-        "romanized": "ma paanch class ma padhchu",
-        "english": "I am in fifth grade",
-        "audio_url": "/audio/nepal-v1/convo_class_padhchu_np.m4a",
-        "has_audio": false,
-        "section": "Getting to know (चिनजान)",
-        "breakdown": "म (I) + पाँच (five) + कक्षामा (in class) + पढ्छु (study) — swap in YOUR grade!"
-      },
-      {
-        "id": "convo_kaha",
-        "devanagari": "तपाईं कहाँ बस्नुहुन्छ?",
-        "romanized": "tapai kaha basnu huncha?",
-        "english": "Where do you live? (respectful)",
-        "audio_url": "/audio/nepal-v1/convo_kaha_np.m4a",
-        "has_audio": false,
-        "section": "Getting to know (चिनजान)",
-        "breakdown": "तपाईं (you) + कहाँ (where) + बस्नुहुन्छ (live)"
-      },
-      {
-        "id": "convo_baschu",
-        "devanagari": "म कोलम्बसमा बस्छु",
-        "romanized": "ma Columbus ma baschu",
-        "english": "I live in Columbus",
-        "audio_url": "/audio/nepal-v1/convo_baschu_np.m4a",
-        "has_audio": false,
-        "section": "Getting to know (चिनजान)",
-        "breakdown": "म (I) + कोलम्बसमा (in Columbus) + बस्छु (live) — swap in YOUR city!"
-      },
-      {
-        "id": "convo_mausam",
-        "devanagari": "आज मौसम कस्तो छ?",
-        "romanized": "aaja mausam kasto cha?",
-        "english": "How's the weather today?",
-        "audio_url": "/audio/nepal-v1/convo_mausam_np.m4a",
-        "has_audio": false,
-        "section": "Everyday small talk (दैनिक कुराकानी)",
-        "breakdown": "आज (today) + मौसम (weather) + कस्तो (how) + छ (is)"
-      },
-      {
-        "id": "convo_khana",
-        "devanagari": "खाना खानुभयो?",
-        "romanized": "khana khanu bhayo?",
-        "english": "Have you eaten?",
-        "audio_url": "/audio/nepal-v1/convo_khana_np.m4a",
-        "has_audio": false,
-        "section": "Everyday small talk (दैनिक कुराकानी)",
-        "breakdown": "खाना (food) + खानुभयो (did you eat) — Nepalis ask this the way others ask 'how are you'. Food is love!"
-      },
-      {
-        "id": "convo_hajur",
-        "devanagari": "हजुर",
-        "romanized": "hajur",
-        "english": "Yes (respectful)",
-        "audio_url": "/audio/nepal-v1/convo_hajur_np.m4a",
-        "has_audio": false,
-        "section": "Everyday small talk (दैनिक कुराकानी)",
-        "breakdown": "The respectful 'yes' — also how you answer when an elder calls your name."
-      },
-      {
-        "id": "convo_hoina",
-        "devanagari": "होइन",
-        "romanized": "hoina",
-        "english": "No",
-        "audio_url": "/audio/nepal-v1/convo_hoina_np.m4a",
-        "has_audio": false,
-        "section": "Everyday small talk (दैनिक कुराकानी)",
-        "breakdown": "The everyday 'no'. Short, useful, use it freely."
-      },
-      {
-        "id": "convo_ramro",
-        "devanagari": "राम्रो!",
-        "romanized": "ramro!",
-        "english": "Good! Nice!",
-        "audio_url": "/audio/nepal-v1/convo_ramro_np.m4a",
-        "has_audio": false,
-        "section": "Everyday small talk (दैनिक कुराकानी)",
-        "breakdown": "Good, nice, beautiful — the all-purpose compliment."
-      }
-    ]
-  },
-  {
-    "id": "dashain",
-    "title": "Dashain",
-    "cover_image": "/images/nepal-v1/cover_dashain.jpg",
-    "theme": "dashain",
-    "kind": "festival",
-    "min_age_band": "seedling",
-    "words": [
-      {
-        "id": "dash_dashain",
-        "devanagari": "दशैं",
-        "romanized": "dashain",
-        "english": "Nepal's biggest festival",
-        "audio_url": "/audio/nepal-v1/dash_dashain_np.m4a",
-        "has_audio": false,
-        "example_sentence_np": "Dashain aayo!",
-        "example_sentence_en": "Dashain is here!"
-      },
-      {
-        "id": "dash_tika",
-        "devanagari": "टीका",
-        "romanized": "tika",
-        "english": "red blessing mark for the forehead",
-        "audio_url": "/audio/nepal-v1/dash_tika_np.m4a",
-        "has_audio": false,
-        "example_sentence_np": "Tika lagaune.",
-        "example_sentence_en": "We wear the tika."
-      },
-      {
-        "id": "dash_jamara",
-        "devanagari": "जमरा",
-        "romanized": "jamara",
-        "english": "barley sprouts grown for nine days",
-        "audio_url": "/audio/nepal-v1/dash_jamara_np.m4a",
-        "has_audio": false,
-        "example_sentence_np": "Jamara ropne.",
-        "example_sentence_en": "We plant the jamara."
-      },
-      {
-        "id": "dash_ping",
-        "devanagari": "पिङ",
-        "romanized": "ping",
-        "english": "tall bamboo swing",
-        "audio_url": "/audio/nepal-v1/dash_ping_np.m4a",
-        "has_audio": false,
-        "example_sentence_np": "Ping khelne.",
-        "example_sentence_en": "Let's play on the swing!"
-      },
-      {
-        "id": "dash_changa",
-        "devanagari": "चङ्गा",
-        "romanized": "changa",
-        "english": "kite",
-        "audio_url": "/audio/nepal-v1/dash_changa_np.m4a",
-        "has_audio": false,
-        "example_sentence_np": "Changa udaune.",
-        "example_sentence_en": "Let's fly kites!"
-      },
-      {
-        "id": "dash_ghatasthapana",
-        "devanagari": "घटस्थापना",
-        "romanized": "ghatasthapana",
-        "english": "day one of Dashain",
-        "audio_url": "/audio/nepal-v1/dash_ghatasthapana_np.m4a",
-        "has_audio": false,
-        "example_sentence_np": "Ghatasthapana ma jamara ropchhau.",
-        "example_sentence_en": "On Ghatasthapana we plant jamara."
-      },
-      {
-        "id": "dash_ashirbad",
-        "devanagari": "आशिर्वाद",
-        "romanized": "ashirbad",
-        "english": "blessing from elders",
-        "audio_url": "/audio/nepal-v1/dash_ashirbad_np.m4a",
-        "has_audio": false,
-        "example_sentence_np": "Ashirbad line.",
-        "example_sentence_en": "We take blessings."
-      },
-      {
-        "id": "dash_bhoj",
-        "devanagari": "भोज",
-        "romanized": "bhoj",
-        "english": "festival feast",
-        "audio_url": "/audio/nepal-v1/dash_bhoj_np.m4a",
-        "has_audio": false,
-        "example_sentence_np": "Mitho bhoj khane.",
-        "example_sentence_en": "We eat a tasty feast."
-      }
-    ]
-  },
-  {
-    "id": "tihar",
-    "title": "Tihar",
-    "cover_image": "/images/nepal-v1/cover_tihar.jpg",
-    "theme": "tihar",
-    "kind": "festival",
-    "min_age_band": "seedling",
-    "words": [
-      {
-        "id": "tihar_tihar",
-        "devanagari": "तिहार",
-        "romanized": "tihar",
-        "english": "the festival of lights",
-        "audio_url": "/audio/nepal-v1/tihar_tihar_np.m4a",
-        "has_audio": false,
-        "example_sentence_np": "Shuva Tihar!",
-        "example_sentence_en": "Happy Tihar!"
-      },
-      {
-        "id": "tihar_diyo",
-        "devanagari": "दियो",
-        "romanized": "diyo",
-        "english": "clay oil lamp",
-        "audio_url": "/audio/nepal-v1/tihar_diyo_np.m4a",
-        "has_audio": false,
-        "example_sentence_np": "Diyo balne.",
-        "example_sentence_en": "Let's light the diyo."
-      },
-      {
-        "id": "tihar_sayapatri",
-        "devanagari": "सयपत्री",
-        "romanized": "sayapatri",
-        "english": "marigold flower",
-        "audio_url": "/audio/nepal-v1/tihar_sayapatri_np.m4a",
-        "has_audio": false,
-        "example_sentence_np": "Sayapatri ko mala.",
-        "example_sentence_en": "A marigold garland."
-      },
-      {
-        "id": "tihar_mala",
-        "devanagari": "माला",
-        "romanized": "mala",
-        "english": "flower garland",
-        "audio_url": "/audio/nepal-v1/tihar_mala_np.m4a",
-        "has_audio": false,
-        "example_sentence_np": "Mala lagaune.",
-        "example_sentence_en": "We wear garlands."
-      },
-      {
-        "id": "tihar_kaag",
-        "devanagari": "काग तिहार",
-        "romanized": "kaag tihar",
-        "english": "day of the crow",
-        "audio_url": "/audio/nepal-v1/tihar_kaag_np.m4a",
-        "has_audio": false,
-        "example_sentence_np": "Kaag lai bhat dine.",
-        "example_sentence_en": "We feed the crow rice."
-      },
-      {
-        "id": "tihar_kukur",
-        "devanagari": "कुकुर तिहार",
-        "romanized": "kukur tihar",
-        "english": "day of the dog",
-        "audio_url": "/audio/nepal-v1/tihar_kukur_np.m4a",
-        "has_audio": false,
-        "example_sentence_np": "Kukur lai mala lagaune.",
-        "example_sentence_en": "We put a garland on the dog."
-      },
-      {
-        "id": "tihar_laxmi",
-        "devanagari": "लक्ष्मी पूजा",
-        "romanized": "laxmi puja",
-        "english": "worship of Laxmi, goddess of wealth",
-        "audio_url": "/audio/nepal-v1/tihar_laxmi_np.m4a",
-        "has_audio": false,
-        "example_sentence_np": "Laxmi puja garne.",
-        "example_sentence_en": "We worship Laxmi."
-      },
-      {
-        "id": "tihar_bhaitika",
-        "devanagari": "भाइटीका",
-        "romanized": "bhai tika",
-        "english": "brothers' day",
-        "audio_url": "/audio/nepal-v1/tihar_bhaitika_np.m4a",
-        "has_audio": false,
-        "example_sentence_np": "Didi le bhai tika lagaune.",
-        "example_sentence_en": "Sister puts tika on brother."
-      },
-      {
-        "id": "tihar_deusi",
-        "devanagari": "देउसी भैलो",
-        "romanized": "deusi bhailo",
-        "english": "festival songs sung at doorsteps",
-        "audio_url": "/audio/nepal-v1/tihar_deusi_np.m4a",
-        "has_audio": false,
-        "example_sentence_np": "Deusi khelne.",
-        "example_sentence_en": "Let's sing deusi!"
-      },
-      {
-        "id": "tihar_selroti",
-        "devanagari": "सेलरोटी",
-        "romanized": "sel roti",
-        "english": "ring-shaped rice bread",
-        "audio_url": "/audio/nepal-v1/tihar_selroti_np.m4a",
-        "has_audio": false,
-        "example_sentence_np": "Sel roti mitho chha.",
-        "example_sentence_en": "Sel roti is tasty."
-      }
-    ]
-  }
+    {
+      "id": "daily-conversations",
+      "title": "Daily Conversations",
+      "cover_image": "/images/nepal-v1/cover_conversations.jpg",
+      "theme": "convo",
+      "kind": "convo",
+      "min_age_band": "seedling",
+      "words": [
+        {
+          "id": "convo_namaste",
+          "devanagari": "नमस्ते",
+          "romanized": "namaste",
+          "english": "Hello! (palms together)",
+          "audio_url": "/audio/nepal-v1/convo_namaste_np.m4a",
+          "has_audio": false,
+          "section": "Greetings (अभिवादन)",
+          "speaker": "A",
+          "breakdown": "One word: na-mas-te. Say it with your palms together 🙏 — it means hello and 'I respect you' at the same time."
+        },
+        {
+          "id": "convo_kasto",
+          "devanagari": "तपाईं कस्तो हुनुहुन्छ?",
+          "romanized": "tapai kasto hunuhuncha?",
+          "english": "How are you? (respectful)",
+          "audio_url": "/audio/nepal-v1/convo_kasto_np.m4a",
+          "has_audio": false,
+          "section": "Greetings (अभिवादन)",
+          "speaker": "B",
+          "breakdown": "तपाईं (you, respectful) + कस्तो (how) + हुनुहुन्छ (are)"
+        },
+        {
+          "id": "convo_thik",
+          "devanagari": "म ठीक छु",
+          "romanized": "ma thik chu",
+          "english": "I'm fine",
+          "audio_url": "/audio/nepal-v1/convo_thik_np.m4a",
+          "has_audio": false,
+          "section": "Greetings (अभिवादन)",
+          "speaker": "A",
+          "breakdown": "म (I) + ठीक (fine) + छु (am)"
+        },
+        {
+          "id": "convo_bhetera",
+          "devanagari": "तपाईंलाई भेटेर खुसी लाग्यो",
+          "romanized": "tapai lai bhetera khushi lagyo",
+          "english": "Nice to meet you",
+          "audio_url": "/audio/nepal-v1/convo_bhetera_np.m4a",
+          "has_audio": false,
+          "section": "Greetings (अभिवादन)",
+          "speaker": "B",
+          "breakdown": "तपाईंलाई (to you) + भेटेर (having met) + खुसी (happy) + लाग्यो (felt)"
+        },
+        {
+          "id": "convo_dhanyabad",
+          "devanagari": "धन्यवाद",
+          "romanized": "dhanyabad",
+          "english": "Thank you",
+          "audio_url": "/audio/nepal-v1/convo_dhanyabad_np.m4a",
+          "has_audio": false,
+          "section": "Greetings (अभिवादन)",
+          "speaker": "A",
+          "breakdown": "धन्य (thanks) + वाद (words) — 'words of thanks'"
+        },
+        {
+          "id": "convo_pharkera",
+          "devanagari": "फेरि भेटौंला",
+          "romanized": "feri bhetaula",
+          "english": "See you again!",
+          "audio_url": "/audio/nepal-v1/convo_pharkera_np.m4a",
+          "has_audio": false,
+          "section": "Greetings (अभिवादन)",
+          "speaker": "B",
+          "breakdown": "फेरि (again) + भेटौंला (we'll meet)"
+        },
+        {
+          "id": "convo_tapai_naam",
+          "devanagari": "तपाईंको नाम के हो?",
+          "romanized": "tapai ko naam k ho?",
+          "english": "What is your name?",
+          "audio_url": "/audio/nepal-v1/convo_tapai_naam_np.m4a",
+          "has_audio": false,
+          "section": "Getting to know (चिनजान)",
+          "speaker": "A",
+          "breakdown": "तपाईंको (your) + नाम (name) + के (what) + हो (is)"
+        },
+        {
+          "id": "convo_mero_naam",
+          "devanagari": "मेरो नाम राम हो",
+          "romanized": "mero naam Ram ho",
+          "english": "My name is Ram",
+          "audio_url": "/audio/nepal-v1/convo_mero_naam_np.m4a",
+          "has_audio": false,
+          "section": "Getting to know (चिनजान)",
+          "speaker": "B",
+          "breakdown": "मेरो (my) + नाम (name) + राम (Ram) + हो (is)"
+        },
+        {
+          "id": "convo_kati_barsa",
+          "devanagari": "तपाईं कति वर्ष हुनुभयो?",
+          "romanized": "tapai kati barsa hunu bhayo?",
+          "english": "How old are you? (respectful)",
+          "audio_url": "/audio/nepal-v1/convo_kati_barsa_np.m4a",
+          "has_audio": false,
+          "section": "Getting to know (चिनजान)",
+          "speaker": "A",
+          "breakdown": "तपाईं (you) + कति (how many) + वर्ष (years) + हुनुभयो (became)"
+        },
+        {
+          "id": "convo_barsa_bhaye",
+          "devanagari": "म दस वर्षको भएँ",
+          "romanized": "ma das barsa ko bhaye",
+          "english": "I am ten years old",
+          "audio_url": "/audio/nepal-v1/convo_barsa_bhaye_np.m4a",
+          "has_audio": false,
+          "section": "Getting to know (चिनजान)",
+          "speaker": "B",
+          "breakdown": "म (I) + दस (ten) + वर्षको (years old) + भएँ (became) — swap in YOUR age!"
+        },
+        {
+          "id": "convo_kati_class",
+          "devanagari": "तपाईं कति कक्षामा पढ्नुहुन्छ?",
+          "romanized": "tapai kati class ma padhnu huncha?",
+          "english": "What grade are you in? (respectful)",
+          "audio_url": "/audio/nepal-v1/convo_kati_class_np.m4a",
+          "has_audio": false,
+          "section": "Getting to know (चिनजान)",
+          "speaker": "A",
+          "breakdown": "तपाईं (you) + कति (which) + कक्षामा (in class) + पढ्नुहुन्छ (study)"
+        },
+        {
+          "id": "convo_class_padhchu",
+          "devanagari": "म पाँच कक्षामा पढ्छु",
+          "romanized": "ma paanch class ma padhchu",
+          "english": "I am in fifth grade",
+          "audio_url": "/audio/nepal-v1/convo_class_padhchu_np.m4a",
+          "has_audio": false,
+          "section": "Getting to know (चिनजान)",
+          "speaker": "B",
+          "breakdown": "म (I) + पाँच (five) + कक्षामा (in class) + पढ्छु (study) — swap in YOUR grade!"
+        },
+        {
+          "id": "convo_kaha",
+          "devanagari": "तपाईं कहाँ बस्नुहुन्छ?",
+          "romanized": "tapai kaha basnu huncha?",
+          "english": "Where do you live? (respectful)",
+          "audio_url": "/audio/nepal-v1/convo_kaha_np.m4a",
+          "has_audio": false,
+          "section": "Getting to know (चिनजान)",
+          "speaker": "A",
+          "breakdown": "तपाईं (you) + कहाँ (where) + बस्नुहुन्छ (live)"
+        },
+        {
+          "id": "convo_baschu",
+          "devanagari": "म कोलम्बसमा बस्छु",
+          "romanized": "ma Columbus ma baschu",
+          "english": "I live in Columbus",
+          "audio_url": "/audio/nepal-v1/convo_baschu_np.m4a",
+          "has_audio": false,
+          "section": "Getting to know (चिनजान)",
+          "speaker": "B",
+          "breakdown": "म (I) + कोलम्बसमा (in Columbus) + बस्छु (live) — swap in YOUR city!"
+        },
+        {
+          "id": "convo_mausam",
+          "devanagari": "आज मौसम कस्तो छ?",
+          "romanized": "aaja mausam kasto cha?",
+          "english": "How's the weather today?",
+          "audio_url": "/audio/nepal-v1/convo_mausam_np.m4a",
+          "has_audio": false,
+          "section": "Everyday small talk (दैनिक कुराकानी)",
+          "speaker": "A",
+          "breakdown": "आज (today) + मौसम (weather) + कस्तो (how) + छ (is)"
+        },
+        {
+          "id": "convo_ramro",
+          "devanagari": "राम्रो छ! घाम लागेको छ।",
+          "romanized": "ramro cha! gham lageko cha.",
+          "english": "It's nice! The sun is out.",
+          "audio_url": "/audio/nepal-v1/convo_ramro_np.m4a",
+          "has_audio": false,
+          "section": "Everyday small talk (दैनिक कुराकानी)",
+          "speaker": "B",
+          "breakdown": "राम्रो (good/nice) + छ (is) + घाम (sunshine) + लागेको छ (has come out)"
+        },
+        {
+          "id": "convo_khana",
+          "devanagari": "खाना खानुभयो?",
+          "romanized": "khana khanu bhayo?",
+          "english": "Have you eaten?",
+          "audio_url": "/audio/nepal-v1/convo_khana_np.m4a",
+          "has_audio": false,
+          "section": "Everyday small talk (दैनिक कुराकानी)",
+          "speaker": "A",
+          "breakdown": "खाना (food) + खानुभयो (did you eat) — Nepalis ask this the way others ask 'how are you'. Food is love!"
+        },
+        {
+          "id": "convo_hajur",
+          "devanagari": "खाएँ! मिठो थियो।",
+          "romanized": "khae! mitho thiyo.",
+          "english": "I ate! It was delicious.",
+          "audio_url": "/audio/nepal-v1/convo_hajur_np.m4a",
+          "has_audio": false,
+          "section": "Everyday small talk (दैनिक कुराकानी)",
+          "speaker": "B",
+          "breakdown": "खाएँ (I ate) + मिठो (delicious) + थियो (was)"
+        },
+        {
+          "id": "convo_maaph",
+          "devanagari": "चिया पिउनुहुन्छ?",
+          "romanized": "chiya piunuhuncha?",
+          "english": "Would you like some tea?",
+          "audio_url": "/audio/nepal-v1/convo_maaph_np.m4a",
+          "has_audio": false,
+          "section": "Everyday small talk (दैनिक कुराकानी)",
+          "speaker": "A",
+          "breakdown": "चिया (tea) + पिउनुहुन्छ (would you like to drink — respectful)"
+        },
+        {
+          "id": "convo_hoina",
+          "devanagari": "हुन्छ, धन्यवाद!",
+          "romanized": "huncha, dhanyabad!",
+          "english": "Sure, thank you!",
+          "audio_url": "/audio/nepal-v1/convo_hoina_np.m4a",
+          "has_audio": false,
+          "section": "Everyday small talk (दैनिक कुराकानी)",
+          "speaker": "B",
+          "breakdown": "हुन्छ (OK / sounds good) + धन्यवाद (thank you)"
+        }
+      ]
+    },
+    {
+      "id": "dashain",
+      "title": "Dashain",
+      "cover_image": "/images/nepal-v1/cover_dashain.jpg",
+      "theme": "dashain",
+      "kind": "festival",
+      "min_age_band": "seedling",
+      "phrases": [
+        {
+          "devanagari": "दशैंको शुभकामना!",
+          "romanized": "dashainko shubhakamana!",
+          "english": "Happy Dashain!",
+          "audio_url": "/audio/nepal-v1/dash_phrase_shubhakamana_np.m4a",
+          "has_audio": true
+        },
+        {
+          "devanagari": "आऊ, टीका लगाइदिन्छु।",
+          "romanized": "aau, tika lagaidinchu.",
+          "english": "Come, I'll put the tika on you.",
+          "audio_url": "/audio/nepal-v1/dash_phrase_aau_tika_np.m4a",
+          "has_audio": true
+        },
+        {
+          "devanagari": "पिङ खेल्न जाऔं!",
+          "romanized": "ping khelna jaaun!",
+          "english": "Let's go play on the swing!",
+          "audio_url": "/audio/nepal-v1/dash_phrase_ping_khelna_np.m4a",
+          "has_audio": true
+        },
+        {
+          "devanagari": "आशिर्वाद छ!",
+          "romanized": "ashirbad cha!",
+          "english": "Blessings!",
+          "audio_url": "/audio/nepal-v1/dash_phrase_ashirbad_np.m4a",
+          "has_audio": true
+        },
+        {
+          "devanagari": "चङ्गा उडाऔं!",
+          "romanized": "changa udaaun!",
+          "english": "Let's fly kites!",
+          "audio_url": "/audio/nepal-v1/dash_phrase_changa_udaun_np.m4a",
+          "has_audio": true
+        }
+      ],
+      "words": [
+        {
+          "id": "dash_dashain",
+          "devanagari": "दशैं",
+          "romanized": "dashain",
+          "english": "Nepal's biggest festival",
+          "image": "/images/nepal-v1/dash_dashain.jpg",
+          "quiz_hint": "The whole family celebrating together under marigold garlands",
+          "audio_url": "/audio/nepal-v1/dash_dashain_np.m4a",
+          "has_audio": true,
+          "example_sentence_np": "Dashain aayo!",
+          "example_sentence_en": "Dashain is here!"
+        },
+        {
+          "id": "dash_tika",
+          "devanagari": "टीका",
+          "romanized": "tika",
+          "english": "red blessing mark for the forehead",
+          "image": "/images/nepal-v1/dash_tika.jpg",
+          "quiz_hint": "An elder's hand placing red powder on a child's forehead",
+          "audio_url": "/audio/nepal-v1/dash_tika_np.m4a",
+          "has_audio": true,
+          "example_sentence_np": "Tika lagaune.",
+          "example_sentence_en": "We wear the tika."
+        },
+        {
+          "id": "dash_jamara",
+          "devanagari": "जमरा",
+          "romanized": "jamara",
+          "english": "barley sprouts grown for nine days",
+          "image": "/images/nepal-v1/dash_jamara.jpg",
+          "quiz_hint": "Bright green barley sprouts growing in a brass plate",
+          "audio_url": "/audio/nepal-v1/dash_jamara_np.m4a",
+          "has_audio": true,
+          "example_sentence_np": "Jamara ropne.",
+          "example_sentence_en": "We plant the jamara."
+        },
+        {
+          "id": "dash_ping",
+          "devanagari": "पिङ",
+          "romanized": "ping",
+          "english": "tall bamboo swing",
+          "image": "/images/nepal-v1/dash_ping.jpg",
+          "quiz_hint": "A child swinging high on a bamboo swing decorated with flowers",
+          "audio_url": "/audio/nepal-v1/dash_ping_np.m4a",
+          "has_audio": true,
+          "example_sentence_np": "Ping khelne.",
+          "example_sentence_en": "Let's play on the swing!"
+        },
+        {
+          "id": "dash_changa",
+          "devanagari": "चङ्गा",
+          "romanized": "changa",
+          "english": "kite",
+          "image": "/images/nepal-v1/dash_changa.jpg",
+          "quiz_hint": "A colorful kite soaring high in the sky",
+          "audio_url": "/audio/nepal-v1/dash_changa_np.m4a",
+          "has_audio": true,
+          "example_sentence_np": "Changa udaune.",
+          "example_sentence_en": "Let's fly kites!"
+        },
+        {
+          "id": "dash_ghatasthapana",
+          "devanagari": "घटस्थापना",
+          "romanized": "ghatasthapana",
+          "english": "day one of Dashain",
+          "image": "/images/nepal-v1/dash_ghatasthapana.jpg",
+          "quiz_hint": "Day one: a clay pot with coconut and leaves, marigolds all around it",
+          "audio_url": "/audio/nepal-v1/dash_ghatasthapana_np.m4a",
+          "has_audio": true,
+          "example_sentence_np": "Ghatasthapana ma jamara ropchhau.",
+          "example_sentence_en": "On Ghatasthapana we plant jamara."
+        },
+        {
+          "id": "dash_ashirbad",
+          "devanagari": "आशिर्वाद",
+          "romanized": "ashirbad",
+          "english": "blessing from elders",
+          "image": "/images/nepal-v1/dash_ashirbad.jpg",
+          "quiz_hint": "Grandparents placing their hands on children's heads in blessing",
+          "audio_url": "/audio/nepal-v1/dash_ashirbad_np.m4a",
+          "has_audio": true,
+          "example_sentence_np": "Ashirbad line.",
+          "example_sentence_en": "We take blessings."
+        },
+        {
+          "id": "dash_bhoj",
+          "devanagari": "भोज",
+          "romanized": "bhoj",
+          "english": "festival feast",
+          "image": "/images/nepal-v1/dash_bhoj.jpg",
+          "quiz_hint": "A festive table loaded with delicious dishes",
+          "audio_url": "/audio/nepal-v1/dash_bhoj_np.m4a",
+          "has_audio": true,
+          "example_sentence_np": "Mitho bhoj khane.",
+          "example_sentence_en": "We eat a tasty feast."
+        },
+        {
+          "id": "dash_durga",
+          "devanagari": "दुर्गा",
+          "romanized": "durga",
+          "english": "Goddess Durga — Dashain celebrates her victory",
+          "image": "/images/nepal-v1/dash_durga.jpg",
+          "quiz_hint": "The goddess with many arms, holding a pink lotus",
+          "audio_url": "/audio/nepal-v1/dash_durga_np.m4a",
+          "has_audio": true,
+          "example_sentence_np": "Durga mata ko jaya!",
+          "example_sentence_en": "Victory to Goddess Durga!"
+        },
+        {
+          "id": "dash_kalash",
+          "devanagari": "कलश",
+          "romanized": "kalash",
+          "english": "holy water pot",
+          "image": "/images/nepal-v1/dash_kalash.jpg",
+          "quiz_hint": "A decorated brass pot topped with green mango leaves and a coconut",
+          "audio_url": "/audio/nepal-v1/dash_kalash_np.m4a",
+          "has_audio": true,
+          "example_sentence_np": "Kalash sthapana garaun!",
+          "example_sentence_en": "Let's set up the kalash!"
+        },
+        {
+          "id": "dash_dakshina",
+          "devanagari": "दक्षिणा",
+          "romanized": "dakshina",
+          "english": "gift money from elders",
+          "image": "/images/nepal-v1/dash_dakshina.jpg",
+          "quiz_hint": "An elder placing gift money into a child's hands",
+          "audio_url": "/audio/nepal-v1/dash_dakshina_np.m4a",
+          "has_audio": true,
+          "example_sentence_np": "Dakshina pae!",
+          "example_sentence_en": "I got dakshina!"
+        },
+        {
+          "id": "dash_phoolpati",
+          "devanagari": "फूलपाती",
+          "romanized": "phoolpati",
+          "english": "day seven of Dashain",
+          "image": "/images/nepal-v1/dash_phoolpati.jpg",
+          "quiz_hint": "A woven basket overflowing with orange marigold flowers",
+          "audio_url": "/audio/nepal-v1/dash_phoolpati_np.m4a",
+          "has_audio": true,
+          "example_sentence_np": "Phoolpati aayo!",
+          "example_sentence_en": "Phoolpati is here!"
+        }
+      ]
+    },
+    {
+      "id": "tihar",
+      "title": "Tihar",
+      "cover_image": "/images/nepal-v1/cover_tihar.jpg",
+      "theme": "tihar",
+      "kind": "festival",
+      "min_age_band": "seedling",
+      "phrases": [
+        {
+          "devanagari": "तिहारको शुभकामना!",
+          "romanized": "tiharko shubhakamana!",
+          "english": "Happy Tihar wishes!",
+          "audio_url": "/audio/nepal-v1/tihar_phrase_shubhakamana_np.m4a",
+          "has_audio": true
+        },
+        {
+          "devanagari": "दियो बालौं!",
+          "romanized": "diyo balaun!",
+          "english": "Let's light the diyo!",
+          "audio_url": "/audio/nepal-v1/tihar_phrase_diyo_balaun_np.m4a",
+          "has_audio": true
+        },
+        {
+          "devanagari": "देउसी खेल्न जाऔं!",
+          "romanized": "deusi khelna jaaun!",
+          "english": "Let's go play deusi!",
+          "audio_url": "/audio/nepal-v1/tihar_phrase_deusi_khelna_np.m4a",
+          "has_audio": true
+        },
+        {
+          "devanagari": "आऊ, भाइटीका लगाइदिन्छु।",
+          "romanized": "aau, bhaitika lagaidinchu.",
+          "english": "Come, I'll put the bhaitika on you.",
+          "audio_url": "/audio/nepal-v1/tihar_phrase_aau_bhaitika_np.m4a",
+          "has_audio": true
+        },
+        {
+          "devanagari": "शुभ तिहार!",
+          "romanized": "shubha tihar!",
+          "english": "Happy Tihar!",
+          "audio_url": "/audio/nepal-v1/tihar_phrase_shubha_tihar_np.m4a",
+          "has_audio": true
+        }
+      ],
+      "words": [
+        {
+          "id": "tihar_tihar",
+          "devanagari": "तिहार",
+          "romanized": "tihar",
+          "english": "the festival of lights",
+          "image": "/images/nepal-v1/tihar_tihar.jpg",
+          "audio_url": "/audio/nepal-v1/tihar_tihar_np.m4a",
+          "has_audio": true,
+          "example_sentence_np": "Shuva Tihar!",
+          "example_sentence_en": "Happy Tihar!"
+        },
+        {
+          "id": "tihar_diyo",
+          "devanagari": "दियो",
+          "romanized": "diyo",
+          "english": "clay oil lamp",
+          "image": "/images/nepal-v1/tihar_diyo.jpg",
+          "audio_url": "/audio/nepal-v1/tihar_diyo_np.m4a",
+          "has_audio": true,
+          "example_sentence_np": "Diyo balne.",
+          "example_sentence_en": "Let's light the diyo."
+        },
+        {
+          "id": "tihar_sayapatri",
+          "devanagari": "सयपत्री",
+          "romanized": "sayapatri",
+          "english": "marigold flower",
+          "image": "/images/nepal-v1/tihar_sayapatri.jpg",
+          "audio_url": "/audio/nepal-v1/tihar_sayapatri_np.m4a",
+          "has_audio": true,
+          "example_sentence_np": "Sayapatri ko mala.",
+          "example_sentence_en": "A marigold garland."
+        },
+        {
+          "id": "tihar_mala",
+          "devanagari": "माला",
+          "romanized": "mala",
+          "english": "flower garland",
+          "image": "/images/nepal-v1/tihar_mala.jpg",
+          "audio_url": "/audio/nepal-v1/tihar_mala_np.m4a",
+          "has_audio": true,
+          "example_sentence_np": "Mala lagaune.",
+          "example_sentence_en": "We wear garlands."
+        },
+        {
+          "id": "tihar_kaag",
+          "devanagari": "काग तिहार",
+          "romanized": "kaag tihar",
+          "english": "day of the crow",
+          "image": "/images/nepal-v1/tihar_kaag.jpg",
+          "audio_url": "/audio/nepal-v1/tihar_kaag_np.m4a",
+          "has_audio": true,
+          "example_sentence_np": "Kaag lai bhat dine.",
+          "example_sentence_en": "We feed the crow rice."
+        },
+        {
+          "id": "tihar_kukur",
+          "devanagari": "कुकुर तिहार",
+          "romanized": "kukur tihar",
+          "english": "day of the dog",
+          "image": "/images/nepal-v1/tihar_kukur.jpg",
+          "audio_url": "/audio/nepal-v1/tihar_kukur_np.m4a",
+          "has_audio": true,
+          "example_sentence_np": "Kukur lai mala lagaune.",
+          "example_sentence_en": "We put a garland on the dog."
+        },
+        {
+          "id": "tihar_laxmi",
+          "devanagari": "लक्ष्मी पूजा",
+          "romanized": "laxmi puja",
+          "english": "worship of Laxmi, goddess of wealth",
+          "image": "/images/nepal-v1/tihar_laxmi.jpg",
+          "audio_url": "/audio/nepal-v1/tihar_laxmi_np.m4a",
+          "has_audio": true,
+          "example_sentence_np": "Laxmi puja garne.",
+          "example_sentence_en": "We worship Laxmi."
+        },
+        {
+          "id": "tihar_bhaitika",
+          "devanagari": "भाइटीका",
+          "romanized": "bhai tika",
+          "english": "brothers' day",
+          "image": "/images/nepal-v1/tihar_bhaitika.jpg",
+          "audio_url": "/audio/nepal-v1/tihar_bhaitika_np.m4a",
+          "has_audio": true,
+          "example_sentence_np": "Didi le bhai tika lagaune.",
+          "example_sentence_en": "Sister puts tika on brother."
+        },
+        {
+          "id": "tihar_deusi",
+          "devanagari": "देउसी भैलो",
+          "romanized": "deusi bhailo",
+          "english": "festival songs sung at doorsteps",
+          "image": "/images/nepal-v1/tihar_deusi.jpg",
+          "audio_url": "/audio/nepal-v1/tihar_deusi_np.m4a",
+          "has_audio": true,
+          "example_sentence_np": "Deusi khelne.",
+          "example_sentence_en": "Let's sing deusi!"
+        },
+        {
+          "id": "tihar_selroti",
+          "devanagari": "सेलरोटी",
+          "romanized": "sel roti",
+          "english": "ring-shaped rice bread",
+          "image": "/images/nepal-v1/food_selroti.jpg",
+          "audio_url": "/audio/nepal-v1/tihar_selroti_np.m4a",
+          "has_audio": true,
+          "example_sentence_np": "Sel roti mitho chha.",
+          "example_sentence_en": "Sel roti is tasty."
+        },
+        {
+          "id": "tihar_gaai",
+          "devanagari": "गाई तिहार",
+          "romanized": "gaai tihar",
+          "english": "day of the cow",
+          "image": "/images/nepal-v1/tihar_gaai.jpg",
+          "audio_url": "/audio/nepal-v1/tihar_gaai_np.m4a",
+          "has_audio": true,
+          "example_sentence_np": "Gaailai tika!",
+          "example_sentence_en": "Tika for the cow!"
+        },
+        {
+          "id": "tihar_saptarangi",
+          "devanagari": "सप्तरंगी टीका",
+          "romanized": "saptarangi tika",
+          "english": "seven-colored tika",
+          "image": "/images/nepal-v1/tihar_saptarangi.jpg",
+          "audio_url": "/audio/nepal-v1/tihar_saptarangi_np.m4a",
+          "has_audio": true,
+          "example_sentence_np": "Saptarangi tika!",
+          "example_sentence_en": "Seven-colored tika!"
+        },
+        {
+          "id": "tihar_jhilimili",
+          "devanagari": "झिलिमिली",
+          "romanized": "jhilimili",
+          "english": "sparkling festival lights",
+          "image": "/images/nepal-v1/tihar_jhilimili.jpg",
+          "audio_url": "/audio/nepal-v1/tihar_jhilimili_np.m4a",
+          "has_audio": true,
+          "example_sentence_np": "Jhilimili batti!",
+          "example_sentence_en": "Twinkling lights!"
+        },
+        {
+          "id": "tihar_makhamali",
+          "devanagari": "मखमली",
+          "romanized": "makhamali",
+          "english": "globe amaranth flower",
+          "image": "/images/nepal-v1/tihar_makhamali.jpg",
+          "audio_url": "/audio/nepal-v1/tihar_makhamali_np.m4a",
+          "has_audio": true,
+          "example_sentence_np": "Makhamali phool!",
+          "example_sentence_en": "Makhamali flower!"
+        }
+      ]
+    }
   ],
   "id": "nepal-v1",
   "language": "Nepali",
@@ -1323,9 +1937,11 @@
       "prompt_en": "Say 'Tihar ko subhakamana!' to someone you love.",
       "prompt_ne": "तिहारको शुभकामना!",
       "audio_url": "/audio/nepal-v1/tihar-greeting.m4a",
+    "has_audio": true,
       "festival": "tihar",
       "age_band": "all",
-      "xp": 10
+      "xp": 10,
+      "verified_xp": 25
     },
     {
       "id": "count-to-five",
@@ -1334,9 +1950,11 @@
       "prompt_en": "Count to 5 in Nepali — ek, dui, tin, char, paanch — for a family member.",
       "prompt_ne": "एक, दुई, तीन, चार, पाँच",
       "audio_url": "/audio/nepal-v1/count-to-five.m4a",
+    "has_audio": true,
       "festival": null,
       "age_band": "all",
-      "xp": 10
+      "xp": 10,
+      "verified_xp": 25
     },
     {
       "id": "dinner-words",
@@ -1345,9 +1963,11 @@
       "prompt_en": "At dinner, point to 3 foods and say their Nepali names.",
       "prompt_ne": "तीनवटा खानेकुराको नेपाली नाम भन्नुहोस्।",
       "audio_url": "/audio/nepal-v1/dinner-words.m4a",
+    "has_audio": true,
       "festival": null,
       "age_band": "all",
-      "xp": 10
+      "xp": 10,
+      "verified_xp": 25
     },
     {
       "id": "deusi-line",
@@ -1356,9 +1976,11 @@
       "prompt_en": "Learn one Deusi/Bhailo line and sing it for your family.",
       "prompt_ne": "देउसीको एउटा लाइन गाउनुहोस्।",
       "audio_url": "/audio/nepal-v1/deusi-line.m4a",
+    "has_audio": true,
       "festival": "tihar",
       "age_band": "all",
-      "xp": 10
+      "xp": 10,
+      "verified_xp": 25
     },
     {
       "id": "tihar-smell",
@@ -1367,10 +1989,59 @@
       "prompt_en": "Ask your grandparents: what was Tihar like when you were little?",
       "prompt_ne": "तपाईं सानो हुँदा तिहार कस्तो थियो?",
       "audio_url": "/audio/nepal-v1/tihar-smell.m4a",
+    "has_audio": true,
       "festival": "tihar",
       "age_band": "all",
-      "xp": 10
+      "xp": 10,
+      "verified_xp": 25
     }
   ],
-  "version": "1.0.0"
+  "version": "1.0.0",
+  "praise": [
+    {
+      "id": "syabas",
+      "devanagari": "स्याबास्!",
+      "romanized": "syabas!",
+      "english": "Well done!",
+      "audio_url": "/audio/nepal-v1/praise_syabas_np.m4a",
+      "has_audio": true
+    },
+    {
+      "id": "ramro",
+      "devanagari": "राम्रो!",
+      "romanized": "ramro!",
+      "english": "Great!",
+      "audio_url": "/audio/nepal-v1/praise_ramro_np.m4a",
+      "has_audio": true
+    },
+    {
+      "id": "badhai",
+      "devanagari": "बधाई छ!",
+      "romanized": "badhai cha!",
+      "english": "Congratulations!",
+      "audio_url": "/audio/nepal-v1/praise_badhai_np.m4a",
+      "has_audio": true
+    }
+  ],
+  "myghar_audio": {
+    "windows": true,
+    "tulsi": true,
+    "door": true,
+    "flags": true,
+    "rangoli": true,
+    "buddy": true,
+    "himal": true,
+    "ghanta": true,
+    "mandir": true,
+    "goldenDiyo": true,
+    "starBadge": true,
+    "mukut": true,
+    "garden": true,
+    "chautari": true,
+    "sun": true,
+    "roof": true,
+    "cloud": true,
+    "sugaGreeting": true,
+    "sugaMitho": true
+  }
 }

@@ -1,0 +1,12 @@
+{
+  "images" : [
+    {
+      "filename" : "older-talking.png",
+      "idiom" : "universal"
+    }
+  ],
+  "info" : {
+    "author" : "xcode",
+    "version" : 1
+  }
+}

@@ -26,9 +26,25 @@ class Word(BaseModel):
                                  # the app groups words by this, in file order
     example_sentence_np: str | None = None   # Romanized Nepali, e.g. "Mitho chha!"
     example_sentence_en: str | None = None   # "It's delicious!"
+    quiz_hint: str | None = None             # short English hint shown under the
+                                             # picture in the picture quiz,
+                                             # e.g. "A brass pot with mango leaves"
     breakdown: str | None = None   # word-by-word gloss for phrases,
                                    # e.g. "तपाईंको (your) + नाम (name)...";
                                    # the app shows it on the teaching card
+    speaker: str | None = None   # "A" or "B" — which person says this line
+                                 # in the Daily Conversations dialogues;
+                                 # the app shows an A/B badge in the list
+    color_hex: str | None = None   # e.g. "#E53935" — Colors deck swatch;
+                                   # the app paints the color chip from this
+
+
+class FestivalPhrase(BaseModel):
+    devanagari: str                  # दशैंको शुभकामना!
+    romanized: str                   # "dashainko shubhakamana!"
+    english: str                     # "Happy Dashain!"
+    audio_url: str | None = None     # "/audio/nepal-v1/dash_phrase_shubhakamana_np.m4a"
+    has_audio: bool = False          # flipped true once Som records the phrase
 
 
 class Deck(BaseModel):
@@ -47,6 +63,7 @@ class Deck(BaseModel):
         default="seedling",
         description="seedling (5-8) | explorer (9-13) | rooted (14-20)",
     )
+    phrases: list[FestivalPhrase] | None = None  # optional "say it" strip (Dashain)
     words: list[Word]
 
 
@@ -78,6 +95,7 @@ class Mission(BaseModel):
     festival: str | None = None   # "tihar" — groups seasonal missions
     age_band: str = "all"         # "all" | "seedling" | "explorer" | "rooted"
     xp: int = 10
+    verified_xp: int = 25        # grown-up-confirmed payout
 
 
 class ContentPack(BaseModel):
@@ -90,3 +108,12 @@ class ContentPack(BaseModel):
     decks: list[Deck]
     quests: list[Quest]
     missions: list[Mission] = []  # default [] keeps packs without missions valid
+    praise: list[Word] = []       # Nepali praise words (syabas, ramro, badhai);
+                                  # WinFanfare plays one at random (Som's
+                                  # recording) for every win EXCEPT the
+                                  # Dashain/Tihar picture quizzes, which
+                                  # stay silent apart from the tapped word
+    myghar_audio: dict[str, bool] = {}  # My Ghar decoration/scene names;
+                                  # id -> has_audio. The app plays
+                                  # /audio/nepal-v1/myghar_<id>_np.m4a when
+                                  # true, else the phone's TTS voice.
