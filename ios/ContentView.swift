@@ -3,6 +3,822 @@ import AVFoundation
 import UIKit
 import Combine
 import CoreText
+import StoreKit
+
+/// Deck intros — a warm "let's learn!" in Som's voice when a beginner
+/// deck is opened. Plays once per deck per app launch (in-memory set,
+/// resets on relaunch) — Som's call 2026-10-19: every reload should greet.
+enum DeckIntro {
+    private static var player: AVPlayer?
+    private static let intros: [String: String] = [
+        "alphabet": "intro_alphabet_np.m4a",
+        "numbers": "intro_numbers_np.m4a",
+        "colors": "intro_colors_np.m4a",
+        "food": "intro_food_np.m4a",
+        "family": "intro_family_np.m4a",
+        "animals": "intro_animals_np.m4a",
+        "fruits": "intro_fruits_np.m4a",
+        "writing": "intro_writing_np.m4a",
+    ]
+    /// In-memory only — resets when the app relaunches, so each new
+    /// session greets again. (Was UserDefaults once-ever; Som wants it
+    /// on every app reload, 2026-10-19.)
+    private static var playedThisLaunch: Set<String> = []
+
+    static func play(for deckID: String) {
+        guard let file = intros[deckID], !playedThisLaunch.contains(deckID) else { return }
+        guard let url = URL(string: GharAPI.baseURLString + "/audio/nepal-v1/" + file) else { return }
+        playedThisLaunch.insert(deckID)
+        player?.pause()
+        player = AVPlayer(url: url)
+        // Small delay so it doesn't clash with the navigation animation.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            player?.play()
+        }
+    }
+}
+
+/// "Vayena!" — warm wrong-answer feedback in Som's voice for all quizzes.
+/// Picks randomly from the bundled clips so it doesn't get robotic.
+/// Falls back to the phone's voice if a clip file is missing.
+/// Teen quizzes use Prakash's voice instead (teen: true).
+enum WrongAnswerFeedback {
+    private static var player: AVPlayer?
+    private static let clips = [
+        "feedback_vayena_1_np.m4a",  // "भएन!"
+        "feedback_vayena_2_np.m4a",  // "भएन, फेरि प्रयास गर।"
+    ]
+    private static let teenClips = [
+        "feedback_teen_wrong_1_np.m4a",  // "भएन!" (Prakash — kept per Som)
+        "feedback_teen_wrong_2_np.m4a",  // Som's own recording
+        "feedback_teen_wrong_3_np.m4a",  // Som's own recording (added 2026-10-21)
+    ]
+
+    static func play(teen: Bool = false) {
+        let all = teen ? teenClips : clips
+        // Pick only from clips that actually exist in the bundle: a
+        // not-yet-recorded custom clip used to fall through to the
+        // phone's robot voice whenever the random pick landed on it.
+        let base = GharAPI.baseURLString + "/audio/nepal-v1/"
+        let available = all.filter { file in
+            guard let url = URL(string: base + file), url.isFileURL else { return true }
+            return FileManager.default.fileExists(atPath: url.path)
+        }
+        if let file = available.randomElement(),
+           let url = URL(string: base + file) {
+            player?.pause()
+            player = AVPlayer(url: url)
+            player?.play()
+            return
+        }
+        NepaliSpeaker.say(nepali: "भएन, फेरि प्रयास गर", romanized: "bhayena, pheri prayas gara")
+    }
+}
+
+/// The $7.99 one-time unlock, via StoreKit 2. No account, no login — the
+/// purchase lives on the family's Apple ID. Apple handles payment, receipts,
+/// and Restore Purchases. We collect nothing: COPPA-safe by construction.
+///
+/// - StoreKit 2 (iOS 15+) is async/await, no delegates.
+/// - Non-consumable = buy once, keep forever.
+/// - `Transaction.currentEntitlements` is checked at launch, so a reinstall
+///   or a new device on the same Apple ID restores silently.
+/// - Views gate on `@AppStorage("ghar.premium.unlocked")` (same key, same
+///   pattern as `ghar.xp.total`) — when this manager flips it, every view
+///   re-renders.
+@MainActor
+final class PremiumManager: ObservableObject {
+    static let shared = PremiumManager()
+    static let productID = "com.sompyakurel.Ghar.unlock_all"
+    static let unlockedKey = "ghar.premium.unlocked"
+
+    @AppStorage(unlockedKey) var isUnlocked = false
+    @Published var product: Product?
+    @Published var isPurchasing = false
+    @Published var errorMessage: String?
+
+    /// Keeps the Transaction.updates listener alive for the app's
+    /// whole life (this manager is a singleton, so it never cancels).
+    private var transactionListener: Task<Void, Never>?
+
+    private init() {
+        // TestFlight = testing: everything unlocked automatically so
+        // testers never hit a lock. App Store builds use the real paywall.
+        if Self.isTestFlight {
+            isUnlocked = true
+        }
+        // Unlock the moment a transaction lands OUTSIDE the purchase
+        // sheet — a parent approving Ask to Buy, a buy finished on
+        // another device. Without this listener the app only learns
+        // about those at the next cold launch (checkEntitlements),
+        // and the compiler warns about exactly that gap.
+        transactionListener = Task { [weak self] in
+            for await result in Transaction.updates {
+                guard case .verified(let t) = result,
+                      t.productID == Self.productID else { continue }
+                if t.revocationDate != nil {
+                    self?.isUnlocked = false // refunded / revoked
+                } else {
+                    self?.isUnlocked = true
+                }
+                await t.finish()
+            }
+        }
+        Task { await loadProduct(); await checkEntitlements() }
+    }
+
+    /// True when running as a TestFlight build (sandbox receipt).
+    static var isTestFlight: Bool {
+        Bundle.main.appStoreReceiptURL?.lastPathComponent == "sandboxReceipt"
+    }
+
+    func loadProduct() async {
+        do {
+            let products = try await Product.products(for: [Self.productID])
+            product = products.first
+        } catch {
+            // Not in App Store Connect yet, or offline — paywall still
+            // shows; purchase just waits for the product to load.
+        }
+    }
+
+    /// If this Apple ID already owns the unlock, flip the flag silently.
+    func checkEntitlements() async {
+        for await result in Transaction.currentEntitlements {
+            guard case .verified(let t) = result else { continue }
+            if t.productID == Self.productID {
+                isUnlocked = true
+                return
+            }
+        }
+    }
+
+    func purchase() async {
+        guard let product else {
+            errorMessage = "Couldn't reach the App Store. Check your connection and try again."
+            return
+        }
+        isPurchasing = true
+        defer { isPurchasing = false }
+        do {
+            let result = try await product.purchase()
+            switch result {
+            case .success(let verification):
+                switch verification {
+                case .verified(let transaction):
+                    isUnlocked = true
+                    await transaction.finish()
+                case .unverified:
+                    errorMessage = "Purchase couldn't be verified. Try Restore Purchases."
+                }
+            case .userCancelled:
+                break // Tapped away — no error, no nag.
+            case .pending:
+                errorMessage = "Waiting on a parent's approval (Ask to Buy)."
+            @unknown default:
+                break
+            }
+        } catch {
+            errorMessage = "Purchase failed. Please try again."
+        }
+    }
+
+    func restore() async {
+        isPurchasing = true
+        defer { isPurchasing = false }
+        do {
+            try await AppStore.sync()
+            await checkEntitlements()
+            if !isUnlocked {
+                errorMessage = "No purchase found on this Apple ID."
+            }
+        } catch {
+            errorMessage = "Restore failed. Check your connection."
+        }
+    }
+}
+
+/// The $7.99 one-time unlock sheet. Opens from any locked content, and once
+/// (celebratory) when the kid finishes everything free.
+struct PaywallView: View {
+    @ObservedObject var premium = PremiumManager.shared
+    @Environment(\.dismiss) private var dismiss
+    @State private var showingGiftSheet = false
+    @State private var showingGate = false
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(spacing: 20) {
+                    Text("\u{1F513}")
+                        .font(.system(size: 64))
+                    Text("Unlock Everything!")
+                        .font(.largeTitle).bold()
+                    Text("One payment of $7.99. Yours forever. No subscription.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+
+                    VStack(alignment: .leading, spacing: 12) {
+                        unlockRow("\u{270D}\u{FE0F}", "Writing practice", "Trace & write every letter + your name")
+                        unlockRow("\u{1F3AE}", "Unlimited quizzes", "As many questions as you want")
+                        unlockRow("\u{1F6A9}", "All missions", "Real-world missions with the family")
+                        unlockRow("\u{1F3A8}", "Every decoration", "Fill your Ghar — festivals, animals & more")
+                        unlockRow("\u{1F3D4}\u{FE0F}", "Festivals & conversations", "Tihar, colors, chats & beyond")
+                    }
+                    .padding()
+                    .background(Color(.systemGroupedBackground))
+                    .clipShape(RoundedRectangle(cornerRadius: 16))
+
+                    if let product = premium.product {
+                        Button {
+                            showingGate = true
+                        } label: {
+                            if premium.isPurchasing {
+                                ProgressView().tint(.white)
+                            } else {
+                                Text("Unlock for \(product.displayPrice)").bold()
+                            }
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.large)
+                        .disabled(premium.isPurchasing)
+                    } else {
+                        Text("Connect to the internet to unlock.")
+                            .foregroundStyle(.secondary)
+                    }
+
+                    if let err = premium.errorMessage {
+                        Text(err)
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                            .multilineTextAlignment(.center)
+                    }
+
+                    Button("Restore Purchases") {
+                        Task { await premium.restore() }
+                    }
+                    .font(.subheadline)
+
+                    // Gift Ghar: the kid asks a grown-up to gift Premium.
+                    // Share sheet with a pre-written message — the grown-up
+                    // buys the $7.99 unlock (or it's shared via Family Sharing).
+                    Button {
+                        showingGiftSheet = true
+                    } label: {
+                        Label("Gift Ghar", systemImage: "gift.fill")
+                    }
+                    .font(.subheadline)
+                    .sheet(isPresented: $showingGiftSheet) {
+                        GiftGharSheet()
+                    }
+
+                    Text("Payment is handled securely by Apple. No account needed.")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                        .multilineTextAlignment(.center)
+                }
+                .padding()
+            }
+            .navigationTitle("Ghar Premium")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Close") { dismiss() }
+                }
+            }
+            .sheet(isPresented: $showingGate) {
+                ParentalGateView {
+                    Task { await premium.purchase() }
+                }
+            }
+            .onChange(of: premium.isUnlocked) { _, unlocked in
+                if unlocked { dismiss() }
+            }
+        }
+    }
+
+    private func unlockRow(_ emoji: String, _ title: String, _ sub: String) -> some View {
+        HStack(spacing: 12) {
+            Text(emoji).font(.title2)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(.headline)
+                Text(sub).font(.subheadline).foregroundStyle(.secondary)
+            }
+        }
+    }
+}
+
+/// Parental gate (App Store Guideline 1.3): an adult-level task that must be
+/// completed before the StoreKit purchase can start. A small child tapping
+/// around can't pass it.
+struct ParentalGateView: View {
+    /// Called once the grown-up completes the hold.
+    var onPassed: () -> Void
+    @Environment(\.dismiss) private var dismiss
+    @State private var progress = 0.0
+    @State private var timer: Timer?
+
+    private let holdSeconds = 2.5
+
+    var body: some View {
+        VStack(spacing: 28) {
+            Spacer()
+            Text("🧑‍🧒").font(.system(size: 72))
+            Text("Grown-ups only")
+                .font(.largeTitle).bold()
+            Text("Only a grown-up can unlock Ghar Premium. Press and hold the button below until it fills up.")
+                .multilineTextAlignment(.center)
+                .foregroundStyle(.secondary)
+                .padding(.horizontal)
+            ZStack(alignment: .leading) {
+                RoundedRectangle(cornerRadius: 18)
+                    .fill(Color(.systemGroupedBackground))
+                GeometryReader { geo in
+                    RoundedRectangle(cornerRadius: 18)
+                        .fill(Color.accentColor)
+                        .frame(width: geo.size.width * max(0, min(1, progress)))
+                }
+                Text(progress >= 1 ? "✓" : "Hold to continue")
+                    .bold()
+                    .frame(maxWidth: .infinity)
+            }
+            .frame(height: 68)
+            .padding(.horizontal, 32)
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { _ in startHold() }
+                    .onEnded { _ in cancelHold() }
+            )
+            .accessibilityLabel("Press and hold to confirm you are a grown-up")
+            Spacer()
+            Text("A purchase never starts without a grown-up's hold.")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+        }
+        .padding()
+        .onDisappear { timer?.invalidate() }
+    }
+
+    private func startHold() {
+        guard timer == nil, progress < 1 else { return }
+        timer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { t in
+            DispatchQueue.main.async {
+                progress += 0.05 / holdSeconds
+                if progress >= 1 {
+                    t.invalidate()
+                    timer = nil
+                    dismiss()
+                    onPassed()
+                }
+            }
+        }
+    }
+
+    private func cancelHold() {
+        timer?.invalidate()
+        timer = nil
+        if progress < 1 { progress = 0 }
+    }
+}
+
+/// Gift Ghar: the sheet behind the paywall's "Gift Ghar" button.
+/// Pre-written message for a parent/grandparent + system share sheet.
+/// The grown-up buys the $7.99 unlock (or it's already shared with them
+/// via Family Sharing) — no account, no codes, nothing to redeem.
+struct GiftGharSheet: View {
+    @Environment(\.dismiss) private var dismiss
+
+    /// The App Store link, once Ghar is published.
+    /// The live App Store link (set at submission, 2026-10-23).
+    static let appStoreURL = "https://apps.apple.com/app/id6819509554"
+
+    static var giftMessage: String {
+        var msg = "Please gift me Ghar Premium! I want to learn Nepali \u{2014} it's $7.99 one time (no subscription) and unlocks writing practice, quizzes, missions, festivals, and my whole Ghar house. \u{2764}\u{FE0F}"
+        if !appStoreURL.isEmpty {
+            msg += "\n\n" + appStoreURL
+        }
+        return msg
+    }
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 20) {
+                Text("\u{1F381}").font(.system(size: 64))
+                Text("Gift Ghar")
+                    .font(.title2).bold()
+                Text("Send this to a parent or grandparent \u{2014} they'll know what to do!")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                Text(Self.giftMessage)
+                    .font(.body)
+                    .padding()
+                    .background(Color(.systemGroupedBackground))
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                ShareLink(item: Self.giftMessage) {
+                    Label("Send gift message", systemImage: "square.and.arrow.up")
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                Spacer()
+            }
+            .padding()
+            .navigationTitle("Gift Ghar")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Close") { dismiss() }
+                }
+            }
+        }
+    }
+}
+
+/// Lesson completion, made visible (Som's call, 2026-10-22 — his
+/// cousin asked for decks to LOCK until finished; instead, finished
+/// decks get a checkmark so kids can SEE what they've completed.
+/// Nothing locks.) A deck completes when every word in it has been
+/// heard at least once — tapped in the deck, played in a dialogue,
+/// or finished in writing practice.
+enum DeckProgress {
+    private static let key = "ghar.heard.words"
+
+    static var heard: Set<String> {
+        get {
+            guard let data = UserDefaults.standard.data(forKey: key),
+                  let set = try? JSONDecoder().decode(Set<String>.self, from: data)
+            else { return [] }
+            return set
+        }
+        set {
+            if let data = try? JSONEncoder().encode(newValue) {
+                UserDefaults.standard.set(data, forKey: key)
+            }
+        }
+    }
+
+    static func markHeard(_ id: String) {
+        var set = heard
+        if set.insert(id).inserted { heard = set }
+    }
+
+    static func heardCount(in deck: Deck) -> Int {
+        let set = heard
+        return deck.words.filter { set.contains($0.id) }.count
+    }
+
+    static func isComplete(_ deck: Deck) -> Bool {
+        !deck.words.isEmpty && heardCount(in: deck) == deck.words.count
+    }
+
+    // MARK: Completion reward (+25 XP, once per deck — Som's call,
+    // 2026-10-22; the all-decks prize stays the v1.1 certificate.)
+
+    private static let rewardedKey = "ghar.decks.rewarded"
+    static let completionBonus = 25
+
+    static var rewarded: Set<String> {
+        get {
+            guard let data = UserDefaults.standard.data(forKey: rewardedKey),
+                  let set = try? JSONDecoder().decode(Set<String>.self, from: data)
+            else { return [] }
+            return set
+        }
+        set {
+            if let data = try? JSONEncoder().encode(newValue) {
+                UserDefaults.standard.set(data, forKey: rewardedKey)
+            }
+        }
+    }
+
+    /// If the deck is complete and hasn't been rewarded yet: bank the
+    /// bonus XP and announce it — ContentView's root listens and throws
+    /// the celebration. Safe to call often (row appear, deck appear /
+    /// disappear, after a word plays): only the first call after
+    /// completion does anything.
+    static func evaluate(_ deck: Deck) {
+        guard isComplete(deck), !rewarded.contains(deck.id) else { return }
+        var done = rewarded
+        done.insert(deck.id)
+        rewarded = done
+        let xpKey = "ghar.xp.total"
+        UserDefaults.standard.set(UserDefaults.standard.integer(forKey: xpKey) + completionBonus,
+                                  forKey: xpKey)
+        // Teen lesson prize: a finished teen deck grants its prize
+        // into the shared My Ghar owned set (the same UserDefaults
+        // key the views' @AppStorage wraps).
+        if let prize = teenDeckPrizes.first(where: { $0.deck == deck.id })?.item {
+            let ownedKey = "ghar.shop.owned"
+            let ownedData = UserDefaults.standard.data(forKey: ownedKey)
+            var owned = (try? JSONDecoder().decode(Set<String>.self, from: ownedData ?? Data())) ?? []
+            if owned.insert(prize.id).inserted,
+               let data = try? JSONEncoder().encode(owned) {
+                UserDefaults.standard.set(data, forKey: ownedKey)
+            }
+        }
+        NotificationCenter.default.post(name: .deckCompleted, object: nil,
+                                        userInfo: ["title": deck.title])
+    }
+}
+
+extension Notification.Name {
+    static let deckCompleted = Notification.Name("ghar.deckCompleted")
+}
+
+/// One deck row in the Lessons list. Alphabet + numbers are free;
+/// everything else shows a lock and opens the paywall until premium.
+struct DeckRow: View {
+    let deck: Deck
+    @AppStorage("ghar.premium.unlocked") private var isUnlocked = false
+    @State private var showingPaywall = false
+    @State private var showingDeck = false
+
+    private var isFree: Bool {
+        deck.id == "alphabet" || deck.id == "numbers"
+    }
+
+    var body: some View {
+        Button {
+            if isFree || isUnlocked { showingDeck = true }
+            else { showingPaywall = true }
+        } label: {
+            HStack(spacing: 12) {
+                DeckCover(deck: deck)
+                VStack(alignment: .leading) {
+                    Text(deck.title).font(.headline)
+                    Text(lessonSubtitle(for: deck))
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                if DeckProgress.isComplete(deck) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.title3)
+                        .foregroundStyle(.green)
+                } else if DeckProgress.heardCount(in: deck) > 0 {
+                    Text("\(DeckProgress.heardCount(in: deck))/\(deck.words.count)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                if !isFree && !isUnlocked {
+                    Image(systemName: "lock.fill")
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .navigationDestination(isPresented: $showingDeck) {
+            lessonDestination(for: deck)
+                .onAppear {
+                    DeckIntro.play(for: deck.id)
+                }
+        }
+        .onAppear { DeckProgress.evaluate(deck) }
+        .sheet(isPresented: $showingPaywall) {
+            PaywallView()
+        }
+    }
+}
+
+/// Streak tracking: consecutive days with at least one mission done.
+/// All on-device (UserDefaults) — COPPA-safe. Milestones auto-grant
+/// exclusive decorations at 7 and 30 days.
+enum Streak {
+    static let countKey = "ghar.streak.count"
+    static let lastDayKey = "ghar.streak.lastDay"
+    static let dailyDoneKey = "ghar.daily.done"
+
+    static var count: Int {
+        UserDefaults.standard.integer(forKey: countKey)
+    }
+
+    static var todayString: String {
+        let fmt = DateFormatter()
+        fmt.dateFormat = "yyyy-MM-dd"
+        return fmt.string(from: Date())
+    }
+
+    /// Call when a mission is completed. Grows the streak if yesterday
+    /// was the last active day, resets to 1 if the chain broke, no-ops
+    /// if already counted today.
+    static func recordMissionDone() {
+        let today = todayString
+        let lastDay = UserDefaults.standard.string(forKey: lastDayKey) ?? ""
+        guard lastDay != today else { return }
+        let fmt = DateFormatter()
+        fmt.dateFormat = "yyyy-MM-dd"
+        let yesterday = fmt.string(from: Calendar.current.date(byAdding: .day, value: -1, to: Date()) ?? Date())
+        let newCount = (lastDay == yesterday) ? count + 1 : 1
+        UserDefaults.standard.set(newCount, forKey: countKey)
+        UserDefaults.standard.set(today, forKey: lastDayKey)
+        checkMilestones(newCount)
+    }
+
+    /// 7-day streak → Flame Diyo. 15-day → Streak Crown. Granted once.
+    static func checkMilestones(_ newCount: Int) {
+        var ids = (try? JSONDecoder().decode(Set<String>.self, from: UserDefaults.standard.data(forKey: "ghar.shop.owned") ?? Data())) ?? Set<String>()
+        var changed = false
+        if newCount >= 7 && !ids.contains("flameDiyo") {
+            ids.insert("flameDiyo"); changed = true
+        }
+        if newCount >= 15 && !ids.contains("streakCrown") {
+            ids.insert("streakCrown"); changed = true
+        }
+        if changed {
+            UserDefaults.standard.set((try? JSONEncoder().encode(ids)) ?? Data(), forKey: "ghar.shop.owned")
+        }
+    }
+
+    /// True if today's daily challenge is already done.
+    static var dailyDoneToday: Bool {
+        UserDefaults.standard.string(forKey: dailyDoneKey) == todayString
+    }
+
+    static func markDailyDone() {
+        UserDefaults.standard.set(todayString, forKey: dailyDoneKey)
+    }
+}
+
+/// Daily quiz progress: how many questions solved today. Backs the
+/// Quiz Blitz daily challenge (5 solves = done). Resets each day.
+enum DailyQuiz {
+    static let dateKey = "ghar.daily.quizDate"
+    static let countKey = "ghar.daily.quizCount"
+
+    /// Call when a quiz question is solved correctly.
+    static func recordSolve() {
+        let today = Streak.todayString
+        if UserDefaults.standard.string(forKey: dateKey) != today {
+            UserDefaults.standard.set(today, forKey: dateKey)
+            UserDefaults.standard.set(0, forKey: countKey)
+        }
+        UserDefaults.standard.set(todayCount + 1, forKey: countKey)
+    }
+
+    static var todayCount: Int {
+        guard UserDefaults.standard.string(forKey: dateKey) == Streak.todayString else { return 0 }
+        return UserDefaults.standard.integer(forKey: countKey)
+    }
+
+    /// True if this solve just finished today's Quiz Blitz.
+    /// Marks it done (the caller adds the bonus XP + fanfare).
+    static func checkBlitzComplete() -> Bool {
+        guard DailyChallenge.today().format == .quizBlitz,
+              !Streak.dailyDoneToday,
+              todayCount >= 5 else { return false }
+        Streak.markDailyDone()
+        Streak.recordMissionDone()
+        return true
+    }
+}
+
+/// One featured challenge per day, rotating formats so each day feels
+/// different. Deterministic from the date — no backend, works offline.
+/// Completing it pays 15 XP (vs 10 for regular missions).
+struct DailyChallenge {
+    enum Format { case mission, teachBack, quizBlitz }
+    let format: Format
+    let title: String
+    let prompt: String
+    /// For .mission: which seed mission to deep-link. For .teachBack:
+    /// the word IDs to teach, in order. Empty for .quizBlitz.
+    let refIDs: [String]
+    let xp = 15
+
+    /// 9 rotating challenges (3 per format), picked by day-of-year.
+    /// Mission challenges use the two free missions so everyone can play.
+    static func today() -> DailyChallenge {
+        let dayNum = Calendar.current.ordinality(of: .day, in: .year, for: Date()) ?? 1
+        let i = dayNum % 9
+        switch i {
+        case 0: return DailyChallenge(format: .mission, title: "Mission of the Day",
+            prompt: "Do the Tihar Greeting mission today — say it to someone you love.", refIDs: ["tihar-greeting"])
+        case 1: return DailyChallenge(format: .teachBack, title: "Teach-Back",
+            prompt: "Teach someone the word 'momo' today. Say it, they repeat!", refIDs: ["momo"])
+        case 2: return DailyChallenge(format: .quizBlitz, title: "Quiz Blitz",
+            prompt: "Answer 5 quiz questions as fast as you can. Beat your best!", refIDs: [])
+        case 3: return DailyChallenge(format: .mission, title: "Mission of the Day",
+            prompt: "Count to 5 in Nepali for a family member today.", refIDs: ["count-to-five"])
+        case 4: return DailyChallenge(format: .teachBack, title: "Teach-Back",
+            prompt: "Teach someone 3 Nepali greetings today: namaste, dhanyabad, pheri bhetaula!", refIDs: ["convo_namaste", "convo_dhanyabad", "convo_pharkera"])
+        case 5: return DailyChallenge(format: .quizBlitz, title: "Quiz Blitz",
+            prompt: "5 questions, no wrong answers. Can you go perfect?", refIDs: [])
+        case 6: return DailyChallenge(format: .mission, title: "Mission of the Day",
+            prompt: "Say the Tihar greeting to someone at dinner tonight.", refIDs: ["tihar-greeting"])
+        case 7: return DailyChallenge(format: .teachBack, title: "Teach-Back",
+            prompt: "Teach someone to count to 3 in Nepali: ek, dui, tin!", refIDs: ["num_ek", "num_dui", "num_tin"])
+        default: return DailyChallenge(format: .quizBlitz, title: "Quiz Blitz",
+            prompt: "Quiz time! 5 questions — how fast can you finish?", refIDs: [])
+        }
+    }
+
+    var icon: String {
+        switch format {
+        case .mission: return "\u{1F6A9}"
+        case .teachBack: return "\u{1F3A4}"
+        case .quizBlitz: return "\u{26A1}"
+        }
+    }
+}
+
+/// Dog celebration popup: confetti + congratulations when ALL missions
+/// are complete. The button deep-links to My Ghar to meet the dog.
+/// The golden soccer ball moment: full-screen, once, when every
+/// teen mission is done. The teen parallel to DogCelebrationView.
+struct TeenBallCelebrationView: View {
+    let onDone: () -> Void
+    @State private var bounce = false
+
+    var body: some View {
+        ZStack {
+            LinearGradient(colors: [Color(red: 0.98, green: 0.75, blue: 0.14),
+                                    Color(red: 0.85, green: 0.45, blue: 0.05)],
+                           startPoint: .top, endPoint: .bottom)
+                .ignoresSafeArea()
+            VStack(spacing: 18) {
+                Text("🏆").font(.system(size: 44))
+                Group {
+                    if let img = myGharSprite("goldsoccerball") {
+                        img.resizable().scaledToFit()
+                    } else {
+                        Text("⚽").font(.system(size: 120))
+                    }
+                }
+                .frame(width: 190, height: 190)
+                .offset(y: bounce ? -14 : 0)
+                .animation(.easeInOut(duration: 0.7).repeatForever(autoreverses: true), value: bounce)
+                Text("GOLDEN SOCCER BALL!")
+                    .font(.largeTitle).bold()
+                    .foregroundStyle(.white)
+                Text("सुनको फुटबल")
+                    .font(.title2)
+                    .foregroundStyle(.white.opacity(0.9))
+                Text("You finished ALL the teen missions. The golden ball is yours — find it in My Ghar, on the Teen Rewards shelf.")
+                    .font(.body)
+                    .foregroundStyle(.white)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 32)
+                Button("Show me! 🎉") { onDone() }
+                    .font(.headline)
+                    .buttonStyle(.borderedProminent)
+                    .tint(.white)
+                    .foregroundStyle(.orange)
+                    .controlSize(.large)
+                    .padding(.top, 6)
+            }
+            .padding()
+        }
+        .onAppear { bounce = true }
+    }
+}
+
+struct DogCelebrationView: View {
+    let dogName: String
+    let onMeetDog: () -> Void
+    @State private var showConfetti = false
+
+    var body: some View {
+        ZStack {
+            VStack(spacing: 20) {
+                Text("🎉")
+                    .font(.system(size: 80))
+                Text("Congratulations!")
+                    .font(.largeTitle)
+                    .bold()
+                SpriteDogView(pose: .idle, wagPhase: 1.2)
+                    .frame(width: 118, height: 168)
+                Text("You unlocked \(dogName)!")
+                    .font(.title2)
+                    .bold()
+                Text("You completed every single mission. \(dogName) is waiting in My Ghar!")
+                    .font(.body)
+                    .multilineTextAlignment(.center)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal)
+                Button("Meet my dog! 🐕") {
+                    onMeetDog()
+                }
+                .buttonStyle(.borderedProminent)
+                .font(.title3)
+            }
+            .padding()
+
+            if showConfetti {
+                ConfettiBurst()
+                    .allowsHitTesting(false)
+            }
+        }
+        .onAppear {
+            showConfetti = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
+                showConfetti = false
+            }
+        }
+    }
+}
 
 /// First screen: tab bar with Lessons, Missions, Quiz, and My Ghar, loaded live from our Python backend.
 ///
@@ -14,43 +830,461 @@ import CoreText
 ///   Each tab gets its own NavigationStack so back-buttons stay separate.
 /// - `NavigationStack` + `NavigationLink` = free push navigation,
 ///   the iOS-standard drill-down pattern.
+/// The load-in (Som's ask, 2026-10-22): prayer flags swaying over a
+/// flickering diyo and the name of the house, while a short plucked
+/// jingle plays. Pure decoration — it dismisses itself, and a tap
+/// skips it.
+struct LaunchSplashView: View {
+    @State private var flagWave = false
+    @State private var flameFlicker = false
+
+    var body: some View {
+        ZStack {
+            LinearGradient(
+                colors: [Color(red: 1.0, green: 0.97, blue: 0.89),
+                         Color(red: 0.99, green: 0.89, blue: 0.71)],
+                startPoint: .top, endPoint: .bottom
+            )
+            .ignoresSafeArea()
+
+            VStack(spacing: 18) {
+                // Prayer flags across the top, swaying gently —
+                // hung lower into the screen, not on the top edge.
+                Spacer().frame(height: 104)
+                Group {
+                    if let img = myGharSprite("splashflags") ?? myGharSprite("flags") {
+                        img.resizable().scaledToFit()
+                    } else {
+                        Text("🚩").font(.system(size: 44))
+                    }
+                }
+                .frame(height: 110)
+                .rotationEffect(.degrees(flagWave ? 1.1 : -1.1), anchor: .top)
+                .offset(y: flagWave ? 3 : 0)
+                .onAppear {
+                    withAnimation(.easeInOut(duration: 2.6).repeatForever(autoreverses: true)) {
+                        flagWave = true
+                    }
+                }
+
+                Spacer()
+
+                // The golden diyo, glowing bright — the prize lamp
+                // from My Ghar, centre stage for the load-in.
+                ZStack {
+                    Circle()
+                        .fill(Color.yellow.opacity(0.5))
+                        .frame(width: 120, height: 120)
+                        .blur(radius: 16)
+                    Group {
+                        if let img = myGharSprite("goldenDiyo") {
+                            img.resizable().scaledToFit()
+                        } else {
+                            Text("🪔").font(.system(size: 64))
+                        }
+                    }
+                    .frame(width: 88, height: 88)
+                }
+                .scaleEffect(flameFlicker ? 1.07 : 0.97)
+                .onAppear {
+                    withAnimation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true)) {
+                        flameFlicker = true
+                    }
+                }
+                Text("घर")
+                    .font(.system(size: 92, weight: .bold, design: .rounded))
+                    .foregroundStyle(Color(red: 0.62, green: 0.16, blue: 0.12))
+                Text("Ghar")
+                    .font(.largeTitle).bold()
+                Text("Learn Nepali 🇳🇵")
+                    .font(.headline)
+                    .foregroundStyle(.secondary)
+
+                Spacer()
+
+                ProgressView()
+                    .tint(.orange)
+                    .padding(.bottom, 28)
+            }
+            .padding(.horizontal)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
 struct ContentView: View {
     @State private var pack: ContentPack?
     @State private var errorMessage: String?
+    @AppStorage("ghar.premium.unlocked") private var isUnlocked = false
+    @AppStorage("ghar.missions.completed") private var completedData = Data()
+    @AppStorage("ghar.quiz.freeUsed") private var quizFreeUsed = 0
+    @AppStorage("ghar.shop.owned") private var ownedData = Data()
+    @AppStorage("ghar.paywall.celebrated") private var paywallCelebrated = false
+    @State private var showingCelebratoryPaywall = false
+    @State private var showingParents = false
+    // Lesson order: kid drags decks into their preferred order, persisted.
+    @AppStorage("ghar.lessons.order") private var deckOrderData = Data()
+    // Next-up guide (Som's pick 2026-10-19, Gurukul-inspired): the card
+    // atop the Lessons tab needs deck-level tracing progress.
+    @AppStorage("ghar.traced.words") private var nextUpTracedData = Data()
+    @State private var nextUpDeck: Deck?
+    @State private var nextUpDeckShown = false
+    @State private var nextUpPaywall = false
+    // Tab selection: lets the dog celebration deep-link to My Ghar.
+    @State private var selectedTab = 0
+    // Welcome greeting: plays the very first time a kid ever opens
+    // the app, then never again (Som's call, 2026-10-20 — it used to
+    // repeat on every launch, which got old fast).
+    @AppStorage("ghar.welcome.played") private var welcomePlayed = false
+    @State private var welcomePlayer: AVPlayer?
+    @State private var welcomeObservation: NSKeyValueObservation?
+    // Fun load-in (Som's ask, 2026-10-22): a Nepali-themed splash with
+    // a short plucked jingle on every cold launch. Tap to skip.
+    @State private var showSplash = true
+    @State private var splashPlayer: AVPlayer?
+    // Deck-completion celebration (2026-10-22): DeckProgress posts
+    // .deckCompleted the first time a deck hits 100%; this card +
+    // confetti is the +25 XP moment, wherever the kid happens to be.
+    @State private var deckCelebration: String? = nil
+
+    /// Welcome greeting: "welcome to Ghar, let's learn Nepali" — once, ever.
+    private func playWelcome() {
+        guard !welcomePlayed else { return }
+        guard let url = URL(string: GharAPI.baseURLString + "/audio/nepal-v1/welcome_ghar_np.m4a") else { return }
+        splashPlayer?.pause()
+        welcomePlayer?.pause()
+        welcomeObservation?.invalidate()
+        let player = AVPlayer(url: url)
+        welcomePlayer = player
+        var observation: NSKeyValueObservation?
+        observation = player.observe(\.timeControlStatus, options: [.new]) { _, change in
+            guard change.newValue == .playing else { return }
+            welcomePlayed = true
+            observation?.invalidate()
+        }
+        welcomeObservation = observation
+        player.play()
+    }
+
+    /// Load-in: play the jingle, hold the splash ~2.2s, fade out.
+    /// The pack loads from the bundle in well under that, so the
+    /// splash IS the loading screen — not a delay on top of one.
+    private func startSplash() {
+        if let url = URL(string: GharAPI.baseURLString + "/audio/nepal-v1/launch_jingle_np.m4a") {
+            splashPlayer?.pause()
+            splashPlayer = AVPlayer(url: url)
+            splashPlayer?.play()
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.2) { dismissSplash() }
+    }
+
+    private func dismissSplash() {
+        guard showSplash else { return }
+        withAnimation(.easeOut(duration: 0.4)) { showSplash = false }
+        playWelcome()
+    }
+    // Dog celebration: confetti + popup when ALL missions are done.
+    @State private var showingDogCelebration = false
+    @AppStorage("ghar.dog.celebrated") private var dogCelebrated = false
+    @State private var showingBallCelebration = false
+    @AppStorage("ghar.ball.celebrated") private var ballCelebrated = false
+    @AppStorage("ghar.dog.name") private var dogName = "Bhunte"
+
+    /// Decks in the kid's custom order. New decks not yet ordered go last.
+    /// Default: alphabet, numbers, colors lead the beginner tier.
+    private var orderedDecks: [Deck] {
+        guard let pack else { return [] }
+        let order = (try? JSONDecoder().decode([String].self, from: deckOrderData)) ?? []
+        let rank = Dictionary(uniqueKeysWithValues: order.enumerated().map { ($1, $0) })
+        let defaultRank: [String: Int] = ["alphabet": 0, "numbers": 1, "colors": 2]
+        return pack.decks.sorted {
+            let r0 = rank[$0.id] ?? defaultRank[$0.id] ?? Int.max
+            let r1 = rank[$1.id] ?? defaultRank[$1.id] ?? Int.max
+            return (r0, $0.id) < (r1, $1.id)
+        }
+    }
+
+    /// Difficulty tiers in display order.
+    private let tiers = ["beginner", "intermediate", "hard", "teen"]
+    private let tierTitles = ["beginner": "🌱 Beginner", "intermediate": "🌿 Intermediate", "hard": "🌳 Hard", "teen": "🔥 Teen"]
+
+    /// Decks grouped by difficulty tier, each in the kid's custom order.
+    private var decksByTier: [(tier: String, title: String, decks: [Deck])] {
+        tiers.map { tier in
+            (tier, tierTitles[tier]!, orderedDecks.filter { ($0.difficulty ?? "beginner") == tier })
+        }
+    }
+
+    // MARK: - Next up guide
+
+    /// Word-level tracing progress, shared with the deck screens.
+    private var nextUpTracedIDs: Set<String> {
+        (try? JSONDecoder().decode(Set<String>.self, from: nextUpTracedData)) ?? []
+    }
+
+    /// The first deck (tier order, then the kid's order) with untraced
+    /// words left — and how many. Decks with no traceable words are
+    /// skipped. This is the guide's idea of "what's next".
+    private var nextUpDeckProgress: (deck: Deck, remaining: Int)? {
+        for section in decksByTier {
+            for deck in section.decks {
+                let traceWords = deck.words.filter { $0.tracePoints != nil }
+                guard !traceWords.isEmpty else { continue }
+                let remaining = traceWords.filter { !nextUpTracedIDs.contains($0.id) }.count
+                if remaining > 0 { return (deck, remaining) }
+            }
+        }
+        return nil
+    }
+
+    private var nextUpIcon: String {
+        if !Streak.dailyDoneToday { return "⭐" }
+        return nextUpDeckProgress == nil ? "🎉" : "✏️"
+    }
+
+    private var nextUpTitle: String {
+        if !Streak.dailyDoneToday { return "Today's challenge" }
+        if let (deck, _) = nextUpDeckProgress { return "Next up: \(deck.title)" }
+        return "All caught up!"
+    }
+
+    private var nextUpSubtitle: String {
+        if !Streak.dailyDoneToday {
+            return "\(DailyChallenge.today().title) — finish for +15 XP"
+        }
+        if let (_, remaining) = nextUpDeckProgress {
+            return "\(remaining) more to trace"
+        }
+        return "Every deck is traced — try a quiz or Balloon Pop"
+    }
+
+    private func nextUpTapped() {
+        // Challenge first: it lives on the Missions tab.
+        if !Streak.dailyDoneToday { selectedTab = 1; return }
+        // All traced: send them to the Quiz tab.
+        guard let (deck, _) = nextUpDeckProgress else { selectedTab = 2; return }
+        // Same free/premium gate as DeckRow.
+        if deck.id == "alphabet" || deck.id == "numbers" || isUnlocked {
+            nextUpDeck = deck
+            nextUpDeckShown = true
+        } else {
+            nextUpPaywall = true
+        }
+    }
+
+    @ViewBuilder
+    private var nextUpCard: some View {
+        Button(action: nextUpTapped) {
+            HStack(spacing: 12) {
+                Text(nextUpIcon).font(.largeTitle)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(nextUpTitle).font(.headline)
+                    Text(nextUpSubtitle).font(.subheadline).foregroundStyle(.secondary)
+                }
+                Spacer()
+                Image(systemName: "chevron.right").foregroundStyle(.tertiary)
+            }
+            .padding()
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(LinearGradient(colors: [.orange.opacity(0.18), .yellow.opacity(0.10)],
+                                         startPoint: .leading, endPoint: .trailing))
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .navigationDestination(isPresented: $nextUpDeckShown) {
+            if let deck = nextUpDeck {
+                lessonDestination(for: deck)
+                    .onAppear { DeckIntro.play(for: deck.id) }
+            }
+        }
+        .sheet(isPresented: $nextUpPaywall) { PaywallView() }
+        .listRowBackground(Color.clear)
+        .listRowSeparator(.hidden)
+        .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+    }
+
+    /// Which tiers are expanded. Collapsed by default.
+    @State private var expandedTiers: Set<String> = []
+
+    private func tierBinding(for tier: String) -> Binding<Bool> {
+        Binding(
+            get: { expandedTiers.contains(tier) },
+            set: { if $0 { expandedTiers.insert(tier) } else { expandedTiers.remove(tier) } }
+        )
+    }
+
+    /// Tier header picture: kids for beginner, family for intermediate, hard-tier art for hard.
+    @ViewBuilder
+    private func tierImage(for tier: String) -> some View {
+        Group {
+            if tier == "beginner" {
+                // Single portrait, same 64×64 rounded style as the other tiers.
+                Image("boy-neutral")
+                    .resizable().scaledToFill()
+                    .frame(width: 64, height: 64, alignment: .top)
+                    .clipped()
+                    .clipShape(RoundedRectangle(cornerRadius: 14))
+            } else if tier == "teen" {
+                // Teen tier: flame symbol.
+                Image(systemName: "flame.fill")
+                    .font(.largeTitle)
+                    .foregroundStyle(.orange)
+                    .frame(width: 64, height: 64)
+            } else if tier == "intermediate" {
+                AsyncImage(url: URL(string: GharAPI.baseURLString + "/images/nepal-v1/cover_family.jpg")) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image.resizable().scaledToFill()
+                    case .failure, .empty:
+                        Color.clear
+                    @unknown default:
+                        Color.clear
+                    }
+                }
+                .frame(width: 64, height: 64)
+                .clipShape(RoundedRectangle(cornerRadius: 14))
+            } else {
+                // Som's uploaded art, bundled via images_b64.
+                AsyncImage(url: URL(string: GharAPI.baseURLString + "/images/nepal-v1/hard-tier.jpg")) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image.resizable().scaledToFill()
+                    case .failure, .empty:
+                        Color.clear
+                    @unknown default:
+                        Color.clear
+                    }
+                }
+                .frame(width: 64, height: 64)
+                .clipShape(RoundedRectangle(cornerRadius: 14))
+            }
+        }
+    }
+
+    /// Big tier header: picture + large title.
+    @ViewBuilder
+    private func tierHeader(tier: String, title: String) -> some View {
+        HStack(spacing: 12) {
+            tierImage(for: tier)
+            Text(title)
+                .font(.title2)
+                .bold()
+        }
+        .padding(.vertical, 4)
+    }
+
+    /// Drag-and-drop within one tier section: rebuild the persisted order.
+    private func moveDeck(in tier: String, from source: IndexSet, to destination: Int) {
+        var sectionIds = decksByTier.first { $0.tier == tier }!.decks.map(\.id)
+        sectionIds.move(fromOffsets: source, toOffset: destination)
+        var newOrder: [String] = []
+        for t in tiers {
+            if t == tier {
+                newOrder += sectionIds
+            } else {
+                newOrder += orderedDecks.filter { ($0.difficulty ?? "beginner") == t }.map(\.id)
+            }
+        }
+        deckOrderData = (try? JSONEncoder().encode(newOrder)) ?? Data()
+    }
+
+    /// True when the kid has exhausted the free tier: 2 missions done,
+    /// 5 quiz questions used, 3 decorations owned. Triggers the one-time
+    /// celebratory paywall.
+    private var hasFinishedFreeTier: Bool {
+        let missions = (try? JSONDecoder().decode(Set<String>.self, from: completedData)) ?? []
+        let owned = (try? JSONDecoder().decode(Set<String>.self, from: ownedData)) ?? []
+        let purchasable = owned.subtracting(["goldenDiyo", "starBadge", "mukut", "flameDiyo", "streakCrown", "quiz50", "quiz100", "quiz250", "quiz500"])
+        return missions.count >= 2 && quizFreeUsed >= 5 && purchasable.count >= 3
+    }
 
     var body: some View {
         Group {
             if let pack {
-                TabView {
-                    // --- Tab 1: Lessons (the deck list you already had) ---
+                TabView(selection: $selectedTab) {
+                    // --- Tab 1: Lessons (collapsible difficulty tiers) ---
                     NavigationStack {
-                        List(pack.decks) { deck in
-                            NavigationLink(destination: lessonDestination(for: deck)) {
-                                HStack(spacing: 12) {
-                                    DeckCover(deck: deck)
-                                    VStack(alignment: .leading) {
-                                        Text(deck.title).font(.headline)
-                                        Text(lessonSubtitle(for: deck))
-                                            .font(.subheadline)
-                                            .foregroundStyle(.secondary)
+                        List {
+                            // The next-up guide: one clear "do this next"
+                            // card above the tiers (challenge, then the
+                            // first unfinished tracing deck, then quizzes).
+                            nextUpCard
+                            ForEach(decksByTier, id: \.tier) { section in
+                                DisclosureGroup(isExpanded: tierBinding(for: section.tier)) {
+                                    ForEach(section.decks) { deck in
+                                        DeckRow(deck: deck)
                                     }
+                                    .onMove { source, dest in
+                                        moveDeck(in: section.tier, from: source, to: dest)
+                                    }
+                                    // Rhymes live in the Beginner tier.
+                                    if section.tier == "beginner" {
+                                        NavigationLink {
+                                            // Premium gate (audit, 2026-10-23): songs and
+                                            // rhymes are paid content like every non-free
+                                            // deck — a locked tap lands on the paywall,
+                                            // never the content.
+                                            if isUnlocked { RhymesView() } else { PaywallView() }
+                                        } label: {
+                                            HStack(spacing: 12) {
+                                                Text("🎶").font(.title2)
+                                                VStack(alignment: .leading, spacing: 2) {
+                                                    Text("Rhymes").font(.headline)
+                                                    Text("Sing along in Nepali").font(.caption).foregroundStyle(.secondary)
+                                                }
+                                            }
+                                        }
+                                    }
+                                    // Songs live in the Hard tier.
+                                    if section.tier == "hard" {
+                                        NavigationLink {
+                                            if isUnlocked { SongsView() } else { PaywallView() }
+                                        } label: {
+                                            HStack(spacing: 12) {
+                                                Text("🎵").font(.title2)
+                                                VStack(alignment: .leading, spacing: 2) {
+                                                    Text("Songs").font(.headline)
+                                                    Text("Sing along in Nepali").font(.caption).foregroundStyle(.secondary)
+                                                }
+                                            }
+                                        }
+                                    }
+                                } label: {
+                                    tierHeader(tier: section.tier, title: section.title)
                                 }
                             }
                         }
                         .navigationTitle("Ghar 🇳🇵")
+                        .toolbar {
+                            ToolbarItem(placement: .navigationBarLeading) {
+                                Button { showingParents = true } label: {
+                                    Image(systemName: "person.crop.circle")
+                                }
+                                .accessibilityLabel("For grown-ups")
+                            }
+                            ToolbarItem(placement: .navigationBarTrailing) { EditButton() }
+                        }
+                        .sheet(isPresented: $showingParents) {
+                            ParentsView()
+                        }
                     }
                     .tabItem {
                         Label("Lessons", systemImage: "book.fill")
                     }
+                    .tag(0)
 
                     // --- Tab 2: Missions (new!) ---
                     NavigationStack {
-                        MissionsView(missions: pack.missions)
+                        MissionsView(missions: pack.missions, words: pack.decks.flatMap { $0.words })
                             .navigationTitle("Missions")
                     }
                     .tabItem {
                         Label("Missions", systemImage: "flag.fill")
                     }
+                    .tag(1)
 
                     // --- Tab 3: Quiz (listening game, with sections) ---
                     NavigationStack {
@@ -60,6 +1294,7 @@ struct ContentView: View {
                     .tabItem {
                         Label("Quiz", systemImage: "questionmark.circle.fill")
                     }
+                    .tag(2)
 
                     // --- Tab 4: My Ghar (the house you build with XP) ---
                     NavigationStack {
@@ -68,6 +1303,75 @@ struct ContentView: View {
                     }
                     .tabItem {
                         Label("My Ghar", systemImage: "house.fill")
+                    }
+                    .tag(3)
+
+                    // --- Tab 5: Leaderboard (family XP/streak/quiz/missions) ---
+                    NavigationStack {
+                        LeaderboardView()
+                            .navigationTitle("Leaderboard")
+                    }
+                    .tabItem {
+                        Label("Leaderboard", systemImage: "trophy.fill")
+                    }
+                    .tag(4)
+                }
+                // Celebratory paywall: once, when the free tier is exhausted.
+                .onChange(of: hasFinishedFreeTier) { _, finished in
+                    if finished && !isUnlocked && !paywallCelebrated {
+                        paywallCelebrated = true
+                        showingCelebratoryPaywall = true
+                    }
+                }
+                .sheet(isPresented: $showingCelebratoryPaywall) {
+                    PaywallView()
+                }
+                // Dog celebration: once, when ALL missions are complete.
+                // Confetti + popup with a deep link to My Ghar.
+                .onChange(of: completedData) { _, _ in
+                    let done = (try? JSONDecoder().decode(Set<String>.self, from: completedData)) ?? []
+                    let total = pack.missions.count
+                    if total > 0 && done.count >= total && !dogCelebrated {
+                        dogCelebrated = true
+                        showingDogCelebration = true
+                        WinFanfare.play()
+                        // The reward moment gets the REAL bark, not the words.
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) {
+                            DogBark.play()
+                        }
+                    }
+                }
+                .sheet(isPresented: $showingDogCelebration) {
+                    DogCelebrationView(dogName: dogName) {
+                        showingDogCelebration = false
+                        selectedTab = 3 // Jump to My Ghar.
+                    }
+                }
+                // Golden ball celebration: once, when ALL teen
+                // missions are complete — the teen parallel to the
+                // dog moment, with its own big screen.
+                .onChange(of: completedData) { _, _ in
+                    let done = (try? JSONDecoder().decode(Set<String>.self, from: completedData)) ?? []
+                    if !TeenMissions.all.isEmpty,
+                       TeenMissions.all.allSatisfy({ done.contains($0.id) }),
+                       !ballCelebrated {
+                        ballCelebrated = true
+                        // Grant the ball right here too (My Ghar's
+                        // grantBall stays as the backstop).
+                        let ownedKey = "ghar.shop.owned"
+                        var owned = (try? JSONDecoder().decode(Set<String>.self, from: UserDefaults.standard.data(forKey: ownedKey) ?? Data())) ?? []
+                        if owned.insert("goldsoccerball").inserted,
+                           let data = try? JSONEncoder().encode(owned) {
+                            UserDefaults.standard.set(data, forKey: ownedKey)
+                        }
+                        showingBallCelebration = true
+                        QuizDing.play()
+                    }
+                }
+                .fullScreenCover(isPresented: $showingBallCelebration) {
+                    TeenBallCelebrationView {
+                        showingBallCelebration = false
+                        selectedTab = 3 // Jump to My Ghar.
                     }
                 }
             } else if let errorMessage {
@@ -85,7 +1389,49 @@ struct ContentView: View {
                     ProgressView("Loading Nepali lessons…")
                 }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
             .task { await load() }
+            .overlay {
+                if showSplash {
+                    LaunchSplashView()
+                        .transition(.opacity)
+                        .onTapGesture { dismissSplash() }
+                }
+            }
+            .onAppear { startSplash() }
+            .overlay {
+                if let title = deckCelebration {
+                    ZStack {
+                        ConfettiBurst()
+                        VStack(spacing: 8) {
+                            Text("🎉").font(.system(size: 52))
+                            Text("Deck complete!")
+                                .font(.title2).bold()
+                            Text("\(title) · +\(DeckProgress.completionBonus) XP")
+                                .font(.headline)
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding(24)
+                        .background(.regularMaterial)
+                        .clipShape(RoundedRectangle(cornerRadius: 20))
+                        .shadow(radius: 12, y: 6)
+                    }
+                    .transition(.scale(scale: 0.8).combined(with: .opacity))
+                    .onTapGesture { deckCelebration = nil }
+                }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .deckCompleted)) { note in
+                guard let title = note.userInfo?["title"] as? String else { return }
+                withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
+                    deckCelebration = title
+                }
+                // Lessons complete with the plain ding — no voice
+                // congratulations (Som's call, 2026-10-23).
+                QuizDing.play()
+                DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+                    withAnimation { deckCelebration = nil }
+                }
+            }
     }
 
     private func load() async {
@@ -118,15 +1464,41 @@ struct ContentView: View {
 ///   there, the checkmark appears here with zero extra wiring.
 struct MissionsView: View {
     let missions: [Mission]
+    let words: [Word]
     @AppStorage("ghar.xp.total") private var totalXP = 0
     @AppStorage("ghar.missions.completed") private var completedData = Data()
     @AppStorage("ghar.missions.verified") private var verifiedData = Data()
+    @AppStorage("ghar.premium.unlocked") private var isUnlocked = false
+    // @AppStorage (not @State): when the quiz or a mission marks the
+    // daily done, this view refreshes on its own — same UserDefaults key.
+    @AppStorage("ghar.daily.done") private var dailyDoneDate = ""
+    @AppStorage("ghar.streak.count") private var streakCount = 0
+    @AppStorage("ghar.shop.owned") private var ownedData = Data()
+    @State private var showingPaywall = false
+    @State private var selectedMissionID: String?
+    @State private var showingQuizBlitz = false
+    @State private var teachBackSession: TeachBackSession?
+
+    private var dailyDoneToday: Bool { dailyDoneDate == Streak.todayString }
+
+    /// True when every mission is finished. Missions lock once done, so
+    /// on a Mission day there is nothing left to "complete for real" —
+    /// without a claim path, finishing all missions would make every
+    /// Mission day an automatic streak-breaker. (Glitch caught by Som,
+    /// 2026-10-21 — he had completed and verified all 10 himself.)
+    private var allMissionsComplete: Bool {
+        !missions.isEmpty && missions.allSatisfy { completedIDs.contains($0.id) }
+    }
+
+    /// Free tier: 2 missions. Everything else needs premium.
+    private func isFree(_ mission: Mission) -> Bool {
+        mission.id == "tihar-greeting" || mission.id == "count-to-five"
+    }
 
     /// The IDs of finished missions, decoded from storage.
     /// @AppStorage only holds simple types (Int, String, Data...), so a Set
     /// gets JSON-encoded into Data — our little packing trick.
-    private var completedIDs: Set<String> {
-        (try? JSONDecoder().decode(Set<String>.self, from: completedData)) ?? []
+    private var completedIDs: Set<String> {        (try? JSONDecoder().decode(Set<String>.self, from: completedData)) ?? []
     }
 
     /// Same trick for grown-up-verified missions: the gold-star set.
@@ -143,6 +1515,14 @@ struct MissionsView: View {
         case "dinner-words": return "🍽️"
         case "deusi-line": return "🎶"
         case "tihar-smell": return "🌸"
+        case "teen-text-it": return "💬"
+        case "teen-teach-slang": return "🔥"
+        case "teen-caption": return "📸"
+        case "teen-comeback": return "💥"
+        case "teen-lyrics": return "🎵"
+        case "teen-order": return "🍔"
+        case "teen-call-home": return "📞"
+        case "teen-teach-back": return "🗣️"
         default: return "⭐"
         }
     }
@@ -152,11 +1532,217 @@ struct MissionsView: View {
         missions.filter { completedIDs.contains($0.id) }.count
     }
 
+    private var ownedIDs: Set<String> {
+        (try? JSONDecoder().decode(Set<String>.self, from: ownedData)) ?? []
+    }
+
+    /// Teaser banner: complete ALL missions to unlock the dog for My Ghar.
+    /// Shows progress; once unlocked, celebrates instead.
+    @ViewBuilder
+    private func dogTeaserCard() -> some View {
+        if ownedIDs.contains("dog") {
+            HStack(spacing: 12) {
+                Text("🐕").font(.largeTitle)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Dog unlocked!").font(.headline)
+                    Text("Check My Ghar to meet your new buddy.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(.green)
+                    .font(.title2)
+            }
+            .padding()
+            .background(Color(.systemBackground))
+            .clipShape(RoundedRectangle(cornerRadius: 16))
+            .shadow(color: .black.opacity(0.06), radius: 4, x: 0, y: 2)
+        } else {
+            HStack(spacing: 12) {
+                Text("🐕").font(.largeTitle)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Mystery reward!").font(.headline)
+                    Text("Complete all \(missions.count) missions to earn an amazing reward for My Ghar…")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Text("\(doneCount)/\(missions.count)")
+                    .font(.headline)
+                    .foregroundStyle(.orange)
+            }
+            .padding()
+            .background(Color(.systemBackground))
+            .clipShape(RoundedRectangle(cornerRadius: 16))
+            .shadow(color: .black.opacity(0.06), radius: 4, x: 0, y: 2)
+        }
+    }
+
+    @AppStorage("ghar.teenmystery.claimed") private var teenMysteryClaimed = ""
+
+    /// How many teen missions are done — drives the rewards card.
+    private var teenDoneCount: Int {
+        TeenMissions.all.filter { completedIDs.contains($0.id) }.count
+    }
+
+    /// One-time random teen prize at 4 teen missions: grants the
+    /// item straight into the shared owned set (My Ghar reads the
+    /// same storage), then remembers the claim so it never re-rolls.
+    private func claimTeenMystery() {
+        let pool = teenPrizeItems.filter { !ownedIDs.contains($0.id) }
+        guard let prize = pool.randomElement() ?? teenPrizeItems.first else { return }
+        var ids = ownedIDs
+        ids.insert(prize.id)
+        ownedData = (try? JSONEncoder().encode(ids)) ?? Data()
+        teenMysteryClaimed = prize.id
+        QuizDing.play()
+    }
+
+    /// Teen rewards card: soccer-ball progress + the mystery prize.
+    @ViewBuilder
+    private func teenRewardsCard() -> some View {
+        let ballOwned = ownedIDs.contains("goldsoccerball")
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 12) {
+                Text("⚽").font(.largeTitle)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(ballOwned ? "Golden soccer ball unlocked!" : "Teen rewards")
+                        .font(.headline)
+                    Text(ballOwned
+                         ? "Your golden soccer ball is waiting in My Ghar."
+                         : "Finish all \(TeenMissions.all.count) teen missions to win a golden soccer ball for My Ghar.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                if ballOwned {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(.green)
+                        .font(.title2)
+                } else {
+                    Text("\(teenDoneCount)/\(TeenMissions.all.count)")
+                        .font(.headline)
+                        .foregroundStyle(.orange)
+                }
+            }
+            Divider()
+            HStack(spacing: 12) {
+                Text("🎁").font(.title2)
+                if !teenMysteryClaimed.isEmpty {
+                    let prize = teenPrizeItems.first { $0.id == teenMysteryClaimed }
+                    Text("Mystery prize won: \(prize?.icon ?? "🎁") \(prize?.nameEn ?? "") — it's in My Ghar!")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                } else if teenDoneCount >= 4 {
+                    Button("Open your mystery prize →") { claimTeenMystery() }
+                        .font(.subheadline).bold()
+                        .buttonStyle(.borderedProminent)
+                        .tint(.purple)
+                } else {
+                    Text("A mystery prize waits at 4 teen missions (\(teenDoneCount)/4).")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+            }
+        }
+        .padding()
+        .background(Color(.systemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .shadow(color: .black.opacity(0.06), radius: 4, x: 0, y: 2)
+    }
+
     /// Accent color for the icon circle + card border, by mission state.
     private func tint(isVerified: Bool, isDone: Bool) -> Color {
         if isVerified { return .yellow }
         if isDone { return .green }
         return .orange
+    }
+
+    /// Difficulty tiers for grouping missions.
+    private let tiers = ["beginner", "intermediate", "hard", "teen"]
+    private let tierTitles = ["beginner": "🌱 Beginner", "intermediate": "🌿 Intermediate", "hard": "🌳 Hard", "teen": "🔥 Teen"]
+
+    /// Pack missions + the code-built teen set. Everything that
+    /// counts PACK missions (the dog, streaks, the header progress)
+    /// keeps using `missions`; only display + navigation combine.
+    private var allMissions: [Mission] { missions + TeenMissions.all }
+
+    private var missionsByTier: [(tier: String, title: String, missions: [Mission])] {
+        tiers.map { tier in
+            (tier, tierTitles[tier]!, allMissions.filter { ($0.difficulty ?? "beginner") == tier })
+        }
+    }
+
+    /// Which tiers are expanded. Collapsed by default.
+    @State private var expandedTiers: Set<String> = []
+
+    private func tierBinding(for tier: String) -> Binding<Bool> {
+        Binding(
+            get: { expandedTiers.contains(tier) },
+            set: { if $0 { expandedTiers.insert(tier) } else { expandedTiers.remove(tier) } }
+        )
+    }
+
+    /// Tier header picture: kids for beginner, family for intermediate, hard-tier art for hard.
+    @ViewBuilder
+    private func tierImage(for tier: String) -> some View {
+        Group {
+            if tier == "beginner" {
+                // Single portrait, same 64×64 rounded style as the other tiers.
+                Image("boy-neutral")
+                    .resizable().scaledToFill()
+                    .frame(width: 64, height: 64, alignment: .top)
+                    .clipped()
+                    .clipShape(RoundedRectangle(cornerRadius: 14))
+            } else if tier == "teen" {
+                // Teen tier: flame symbol.
+                Image(systemName: "flame.fill")
+                    .font(.largeTitle)
+                    .foregroundStyle(.orange)
+                    .frame(width: 64, height: 64)
+            } else if tier == "intermediate" {
+                AsyncImage(url: URL(string: GharAPI.baseURLString + "/images/nepal-v1/cover_family.jpg")) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image.resizable().scaledToFill()
+                    case .failure, .empty:
+                        Color.clear
+                    @unknown default:
+                        Color.clear
+                    }
+                }
+                .frame(width: 64, height: 64)
+                .clipShape(RoundedRectangle(cornerRadius: 14))
+            } else {
+                // Som's uploaded art, bundled via images_b64.
+                AsyncImage(url: URL(string: GharAPI.baseURLString + "/images/nepal-v1/hard-tier.jpg")) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image.resizable().scaledToFill()
+                    case .failure, .empty:
+                        Color.clear
+                    @unknown default:
+                        Color.clear
+                    }
+                }
+                .frame(width: 64, height: 64)
+                .clipShape(RoundedRectangle(cornerRadius: 14))
+            }
+        }
+    }
+
+    /// Big tier header: picture + large title.
+    @ViewBuilder
+    private func tierHeader(tier: String, title: String) -> some View {
+        HStack(spacing: 12) {
+            tierImage(for: tier)
+            Text(title)
+                .font(.title2)
+                .bold()
+        }
+        .padding(.vertical, 4)
     }
 
     var body: some View {
@@ -186,17 +1772,222 @@ struct MissionsView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 16))
                 .shadow(color: .black.opacity(0.06), radius: 4, x: 0, y: 2)
 
-                // One card per mission.
-                ForEach(missions) { mission in
-                    NavigationLink(destination: MissionDetailView(mission: mission)) {
-                        missionCard(for: mission)
+                // Daily Streak Challenge: one featured challenge per day,
+                // rotating formats. +15 XP, and doing it keeps the streak alive.
+                dailyChallengeCard()
+
+                // Dog teaser: finish ALL missions to unlock a dog for My Ghar.
+                dogTeaserCard()
+
+                // Teen rewards: mystery prize at 4 teen missions,
+                // soccer ball at all 8.
+                teenRewardsCard()
+
+                // One card per mission, in collapsible difficulty tiers. Locked ones show the paywall.
+                ForEach(missionsByTier, id: \.tier) { section in
+                    if !section.missions.isEmpty {
+                        DisclosureGroup(isExpanded: tierBinding(for: section.tier)) {
+                            VStack(spacing: 10) {
+                                ForEach(section.missions) { mission in
+                                    Button {
+                                        if isFree(mission) || isUnlocked {
+                                            selectedMissionID = mission.id
+                                        } else {
+                                            showingPaywall = true
+                                        }
+                                    } label: {
+                                        missionCard(for: mission)
+                                            .overlay(alignment: .topTrailing) {
+                                                if !isFree(mission) && !isUnlocked {
+                                                    Image(systemName: "lock.fill")
+                                                        .foregroundStyle(.secondary)
+                                                        .padding(8)
+                                                }
+                                            }
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
+                            .padding(.top, 4)
+                        } label: {
+                            tierHeader(tier: section.tier, title: section.title)
+                        }
                     }
-                    .buttonStyle(.plain)
                 }
             }
             .padding()
         }
         .background(Color(.systemGroupedBackground))
+        .navigationDestination(item: $selectedMissionID) { id in
+            if let mission = allMissions.first(where: { $0.id == id }) {
+                MissionDetailView(mission: mission)
+            }
+        }
+        .sheet(isPresented: $showingPaywall) {
+            PaywallView()
+        }
+    }
+
+    /// The daily challenge card: today's featured challenge + streak.
+    /// Premium-only. Each format completes through a REAL flow — no
+    /// "I did it" button: Quiz Blitz via 5 quiz solves, Mission via a
+    /// real mission completion, Teach-back via a real recording.
+    @ViewBuilder
+    private func dailyChallengeCard() -> some View {
+        if !isUnlocked {
+            // Locked: premium-only. Tapping opens the paywall.
+            Button {
+                showingPaywall = true
+            } label: {
+                HStack(spacing: 12) {
+                    Text("\u{1F525}")
+                        .font(.largeTitle)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Streak Challenge")
+                            .font(.headline)
+                        Text("A new challenge every day — Premium only")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Image(systemName: "lock.fill")
+                        .foregroundStyle(.secondary)
+                }
+                .padding()
+                .background(Color(.systemBackground))
+                .clipShape(RoundedRectangle(cornerRadius: 16))
+                .shadow(color: .black.opacity(0.06), radius: 4, x: 0, y: 2)
+            }
+            .buttonStyle(.plain)
+        } else {
+            let challenge = DailyChallenge.today()
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Text("Streak Challenge")
+                        .font(.headline)
+                    Spacer()
+                    Text("\u{1F525} \(streakCount) day\(streakCount == 1 ? "" : "s")")
+                        .font(.subheadline)
+                        .bold()
+                        .foregroundStyle(.orange)
+                }
+                HStack(spacing: 12) {
+                    Text(challenge.icon)
+                        .font(.largeTitle)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(challenge.title)
+                            .font(.subheadline)
+                            .bold()
+                        Text(challenge.format == .mission && allMissionsComplete
+                             ? "You've finished every mission — amazing! Claim today's streak bonus below."
+                             : challenge.prompt)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                challengeAction(challenge)
+            }
+            .padding()
+            .background(Color(.systemBackground))
+            .clipShape(RoundedRectangle(cornerRadius: 16))
+            .shadow(color: .black.opacity(0.06), radius: 4, x: 0, y: 2)
+            .sheet(isPresented: $showingQuizBlitz) {
+                NavigationStack {
+                    QuizFeedView(words: words, blitzMode: true)
+                        .navigationTitle("Quiz Blitz")
+                }
+            }
+            .sheet(item: $teachBackSession) { session in
+                NavigationStack {
+                    TeachBackView(words: session.words)
+                }
+            }
+        }
+    }
+
+    /// The per-format action row. Done state when finished; otherwise a
+    /// Start button that drops the kid into the real flow.
+    @ViewBuilder
+    private func challengeAction(_ challenge: DailyChallenge) -> some View {
+        if dailyDoneToday {
+            Label("Done for today! See you tomorrow.", systemImage: "checkmark.circle.fill")
+                .font(.subheadline)
+                .foregroundStyle(.green)
+        } else {
+            switch challenge.format {
+            case .mission:
+                if allMissionsComplete {
+                    // Every mission is done and locked — nothing left to
+                    // complete for real, so the day is claimable. Same +15
+                    // and same streak credit as any other format's finish.
+                    Button("Claim today's bonus \u{2192}") {
+                        Streak.markDailyDone()
+                        Streak.recordMissionDone()
+                        totalXP += challenge.xp
+                    }
+                    .buttonStyle(.borderedProminent)
+                    Text("All missions complete — today's streak is yours for showing up. +15 XP")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    if let refID = challenge.refIDs.first,
+                       let suggested = missions.first(where: { $0.id == refID }) {
+                        Button("Start: \(suggested.titleEn) \u{2192}") {
+                            selectedMissionID = suggested.id
+                        }
+                        .buttonStyle(.borderedProminent)
+                    }
+                    Text("Complete any mission below for real to finish — +15 XP bonus.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            case .quizBlitz:
+                Button("Start Quiz Blitz \u{2192}") {
+                    showingQuizBlitz = true
+                }
+                .buttonStyle(.borderedProminent)
+                Text("Solve 5 quiz questions to finish today's challenge.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            case .teachBack:
+                Button("Start Teach-Back \u{2192}") {
+                    let words = resolveTeachBackWords()
+                    if !words.isEmpty {
+                        teachBackSession = TeachBackSession(words: words)
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                Text("Hear the word, record yourself saying it. +15 XP")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    /// The teach-back words: today's picks in order. A lone alphabet letter
+    /// is too easy for a daily streak, so it expands to 5 letters.
+    private func resolveTeachBackWords() -> [Word] {
+        guard !words.isEmpty else { return [] }
+        var result: [Word] = []
+        for id in DailyChallenge.today().refIDs {
+            if let w = words.first(where: { $0.id == id }) {
+                result.append(w)
+            }
+        }
+        // Fallback: a real word with audio — never a lone alphabet letter.
+        if result.isEmpty {
+            if let w = words.first(where: { ($0.hasAudio ?? true) && $0.devanagari.count > 1 }) {
+                result = [w]
+            } else if let w = words.first {
+                result = [w]
+            }
+        }
+        // Som's rule: recording one letter is too easy — make it 5.
+        if result.count == 1, result[0].devanagari.count == 1 {
+            let letters = Array(words.filter { $0.devanagari.count == 1 }.prefix(5))
+            if letters.count == 5 { result = letters }
+        }
+        return result
     }
 
     /// A single mission card: emoji icon, titles, prompt, XP pill, status.
@@ -291,7 +2082,9 @@ final class MissionRecorder: ObservableObject {
 
     func start(to url: URL) {
         // Session setup goes through sessionQueue (off main thread).
-        // The recorder itself starts on main once the session is live.
+        // The recorder also starts on sessionQueue — AVAudioRecorder.record()
+        // internally activates the session, which triggers Xcode's purple
+        // warning if called on main.
         sessionQueue.async { [weak self] in
             let session = AVAudioSession.sharedInstance()
             // .defaultToSpeaker: without it, .playAndRecord routes to the
@@ -304,21 +2097,27 @@ final class MissionRecorder: ObservableObject {
                 AVNumberOfChannelsKey: 1,
                 AVEncoderAudioQualityKey: AVAudioQuality.high.rawValue,
             ]
+            let recorder = try? AVAudioRecorder(url: url, settings: settings)
+            recorder?.record()
+            let isRecording = recorder?.isRecording ?? false
             DispatchQueue.main.async {
                 guard let self = self else { return }
-                self.recorder = try? AVAudioRecorder(url: url, settings: settings)
-                self.recorder?.record()
-                self.isRecording = self.recorder?.isRecording ?? false
+                self.recorder = recorder
+                self.isRecording = isRecording
             }
         }
     }
 
     func stop() {
-        recorder?.stop()
-        recorder = nil
-        isRecording = false
-        // Back to playback mode so word audio goes through the speaker.
-        sessionQueue.async {
+        // Stop the recorder on sessionQueue too — stop() can deactivate
+        // the session internally, which warns on main.
+        sessionQueue.async { [weak self] in
+            self?.recorder?.stop()
+            DispatchQueue.main.async {
+                self?.recorder = nil
+                self?.isRecording = false
+            }
+            // Back to playback mode so word audio goes through the speaker.
             let session = AVAudioSession.sharedInstance()
             try? session.setCategory(.playback, mode: .default)
             try? session.setActive(true)
@@ -338,6 +2137,10 @@ struct ProveItSheet: View {
     @State private var player: AVPlayer?
     @State private var hasRecording = false
     @State private var showDenied = false
+    // Anti-cheat: proof needs at least 2 seconds of audio.
+    @State private var recordedSeconds = 0.0
+    @State private var tickTimer: Timer?
+    @State private var tooShort = false
 
     var body: some View {
         NavigationStack {
@@ -359,6 +2162,21 @@ struct ProveItSheet: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(recorder.isRecording ? .red : .blue)
+
+                // Live timer: the kid watches the seconds count up, and
+                // proof under 2s doesn't count — no more empty "proof".
+                if recorder.isRecording {
+                    Text(recordedSeconds < 2.0
+                         ? String(format: "%.0fs… keep talking!", recordedSeconds)
+                         : String(format: "%.0fs — good, you can stop!", recordedSeconds))
+                        .font(.headline)
+                        .foregroundColor(recordedSeconds < 2.0 ? .secondary : .green)
+                }
+                if tooShort && !recorder.isRecording {
+                    Text("Too short! Say it properly — at least 2 seconds.")
+                        .font(.headline)
+                        .foregroundStyle(.red)
+                }
 
                 if hasRecording && !recorder.isRecording {
                     Button(action: playProof) {
@@ -387,6 +2205,11 @@ struct ProveItSheet: View {
             .onAppear {
                 hasRecording = FileManager.default.fileExists(atPath: proofURL.path)
             }
+            .onDisappear {
+                tickTimer?.invalidate()
+                tickTimer = nil
+                if recorder.isRecording { recorder.stop() }
+            }
             .alert("Microphone is off", isPresented: $showDenied) {
                 Button("OK", role: .cancel) {}
             } message: {
@@ -398,12 +2221,29 @@ struct ProveItSheet: View {
     private func recordTapped() {
         if recorder.isRecording {
             recorder.stop()
-            hasRecording = true
+            tickTimer?.invalidate()
+            tickTimer = nil
+            // Anti-cheat: under 2 seconds of audio doesn't count. Delete
+            // the stub so tap-record-tap-stop can't fake proof.
+            if recordedSeconds < 2.0 {
+                try? FileManager.default.removeItem(at: proofURL)
+                hasRecording = false
+                tooShort = true
+            } else {
+                hasRecording = true
+                tooShort = false
+            }
             return
         }
         recorder.requestPermission { granted in
             if granted {
+                recordedSeconds = 0
+                tooShort = false
                 recorder.start(to: proofURL)
+                tickTimer?.invalidate()
+                tickTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { _ in
+                    recordedSeconds += 0.1
+                }
             } else {
                 showDenied = true
             }
@@ -411,19 +2251,78 @@ struct ProveItSheet: View {
     }
 
     private func playProof() {
+        player?.pause()
         player = AVPlayer(url: proofURL)
         player?.play()
     }
 }
 
 /// Step 2 of "Prove it": the grown-up's screen. They listen to the kid's
-/// recording and tap confirm — one honest tap is the whole verification.
+/// recording and press-and-hold to confirm — a grown-up hold after
+/// hearing the whole recording is the verification.
 struct GrownUpSheet: View {
     let mission: Mission
     let proofURL: URL
     let onConfirm: () -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var player: AVPlayer?
+    // Anti-cheat (strengthened 2026-10-19, Som's call): the Confirm used
+    // to unlock the instant ▶ was tapped, so a kid could play one second
+    // of their own humming and self-confirm for +25 XP. Now the recording
+    // must play to the end AND the confirm is a 2.5s press-and-hold —
+    // same gate idea as ParentalGateView, inline instead of a sheet.
+    @State private var playbackDone = false
+    @State private var endObserver: NSObjectProtocol?
+    @State private var holdProgress = 0.0
+    @State private var holdTimer: Timer?
+    private let holdSeconds = 2.5
+
+    /// How long the kid's recording is — a 2s mumble looks different
+    /// from a real teach-back. Loaded async (sync .duration is deprecated).
+    @State private var proofSeconds = 0
+
+    private func loadProofDuration() {
+        Task {
+            if let d = try? await AVURLAsset(url: proofURL).load(.duration) {
+                proofSeconds = max(0, Int(d.seconds.rounded()))
+            }
+        }
+    }
+
+    /// Play the proof and flip playbackDone only when it reaches the
+    /// end — tapping play and confirming instantly used to work.
+    private func playToEnd() {
+        if let endObserver {
+            NotificationCenter.default.removeObserver(endObserver)
+        }
+        let item = AVPlayerItem(url: proofURL)
+        player = AVPlayer(playerItem: item)
+        player?.play()
+        playbackDone = false
+        endObserver = NotificationCenter.default.addObserver(
+            forName: .AVPlayerItemDidPlayToEndTime, object: item, queue: .main
+        ) { _ in playbackDone = true }
+    }
+
+    private func startHold() {
+        guard playbackDone, holdTimer == nil, holdProgress < 1 else { return }
+        holdTimer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { t in
+            DispatchQueue.main.async {
+                holdProgress += 0.05 / holdSeconds
+                if holdProgress >= 1 {
+                    t.invalidate()
+                    holdTimer = nil
+                    onConfirm()
+                }
+            }
+        }
+    }
+
+    private func cancelHold() {
+        holdTimer?.invalidate()
+        holdTimer = nil
+        if holdProgress < 1 { holdProgress = 0 }
+    }
 
     var body: some View {
         NavigationStack {
@@ -435,23 +2334,44 @@ struct GrownUpSheet: View {
                     .multilineTextAlignment(.center)
                     .foregroundStyle(.secondary)
 
-                Button(action: {
-                    player = AVPlayer(url: proofURL)
-                    player?.play()
-                }) {
-                    Label("▶ Play recording", systemImage: "play.circle.fill")
+                Button(action: playToEnd) {
+                    Label("▶ Play recording (\(proofSeconds)s)", systemImage: "play.circle.fill")
                         .font(.title2)
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.bordered)
 
-                Button(action: onConfirm) {
-                    Label("✅ Confirm — mission done", systemImage: "checkmark.circle.fill")
+                // Hold-to-confirm gate: a 2.5s press that a quick tap
+                // can't fake, unlocked only after the whole recording
+                // has been heard. (Mirrors ParentalGateView inline.)
+                ZStack(alignment: .leading) {
+                    RoundedRectangle(cornerRadius: 16)
+                        .fill(Color(.systemGroupedBackground))
+                    GeometryReader { geo in
+                        RoundedRectangle(cornerRadius: 16)
+                            .fill(Color.green)
+                            .frame(width: geo.size.width * max(0, min(1, holdProgress)))
+                    }
+                    Text(holdProgress >= 1 ? "✓" : "✅ Hold to confirm — mission done")
                         .font(.title3)
+                        .bold()
                         .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(.green)
+                .frame(height: 60)
+                .opacity(playbackDone ? 1 : 0.5)
+                .gesture(
+                    DragGesture(minimumDistance: 0)
+                        .onChanged { _ in startHold() }
+                        .onEnded { _ in cancelHold() }
+                )
+                .accessibilityLabel("Press and hold to confirm the mission")
+
+                if !playbackDone {
+                    Text("Play the whole recording first — then a grown-up holds to confirm.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                }
 
                 Button("Not yet") { dismiss() }
                     .foregroundStyle(.secondary)
@@ -459,6 +2379,13 @@ struct GrownUpSheet: View {
             .padding()
             .navigationTitle("Grown-up check")
             .navigationBarTitleDisplayMode(.inline)
+            .onAppear { loadProofDuration() }
+            .onDisappear {
+                holdTimer?.invalidate()
+                if let endObserver {
+                    NotificationCenter.default.removeObserver(endObserver)
+                }
+            }
         }
     }
 }
@@ -472,6 +2399,159 @@ struct GrownUpSheet: View {
 /// - "I did it!" → +xp. Honor system, same as before.
 /// - "Prove it 🎤" → record + grown-up confirm → +verifiedXp (bigger).
 ///   Proving a mission already done the plain way pays the difference.
+/// Teach-back: the kid hears the word, records themselves saying it,
+/// plays it back. The recording IS the proof — finishing one completes
+/// the daily challenge. On-device, COPPA-safe, nothing uploads.
+/// Wraps the teach-back words for .sheet(item:) — the sheet content is
+/// guaranteed to have its data, so it can never present blank.
+struct TeachBackSession: Identifiable {
+    let id = UUID()
+    let words: [Word]
+}
+
+struct TeachBackView: View {
+    let words: [Word]
+    @StateObject private var recorder = MissionRecorder()
+    @AppStorage("ghar.xp.total") private var totalXP = 0
+    @Environment(\.dismiss) private var dismiss
+    @State private var index = 0
+    @State private var micDenied = false
+    @State private var didRecord = false
+    @State private var audioPlayer: AVPlayer?
+    @State private var clipPlayer: AVPlayer?
+    // Anti-cheat (Som's call 2026-10-19): recordings under 2 seconds
+    // don't count — before this, Record → instant Stop (pure silence)
+    // collected the daily +15 XP. Same pattern as ProveItSheet.
+    @State private var recordedSeconds = 0.0
+    @State private var tickTimer: Timer?
+    @State private var tooShort = false
+
+    private var word: Word { words[index] }
+    private var isLast: Bool { index == words.count - 1 }
+
+    private var clipURL: URL {
+        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("teachback_\(word.id)_\(Streak.todayString).m4a")
+    }
+
+    /// Som's recording when the family recorded one, TTS otherwise.
+    private func hearIt() {
+        if word.hasAudio == true, let url = URL(string: GharAPI.baseURLString + word.audioUrl) {
+            audioPlayer?.pause()
+            audioPlayer = AVPlayer(url: url)
+            audioPlayer?.play()
+        } else {
+            NepaliSpeaker.say(nepali: word.devanagari, romanized: word.romanized)
+        }
+    }
+
+    private func advance() {
+        didRecord = false
+        recordedSeconds = 0
+        tooShort = false
+        audioPlayer?.pause(); audioPlayer = nil
+        clipPlayer?.pause(); clipPlayer = nil
+        if isLast {
+            totalXP += DailyChallenge.today().xp
+            Streak.markDailyDone()
+            Streak.recordMissionDone()
+            WinFanfare.play()
+            dismiss()
+        } else {
+            index += 1
+        }
+    }
+
+    var body: some View {
+        VStack(spacing: 20) {
+            Text("Say it like a teacher!")
+                .font(.title2)
+                .bold()
+            if words.count > 1 {
+                Text("Word \(index + 1) of \(words.count)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Text(word.devanagari)
+                .font(.system(size: 64))
+            Text(word.romanized)
+                .font(.title3)
+                .foregroundStyle(.secondary)
+            Button("Hear it", action: hearIt)
+                .buttonStyle(.bordered)
+
+            if didRecord {
+                Label("Nice! You said it!", systemImage: "checkmark.circle.fill")
+                    .font(.headline)
+                    .foregroundStyle(.green)
+                Button("Hear yourself") {
+                    clipPlayer?.pause()
+                    clipPlayer = AVPlayer(url: clipURL)
+                    clipPlayer?.play()
+                }
+                .buttonStyle(.bordered)
+                Button(isLast ? "Finish +15 XP" : "Next word \u{2192}", action: advance)
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+            } else if micDenied {
+                Text("Microphone is off — turn it on in Settings to record.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            } else {
+                Button(recorder.isRecording ? "Stop recording" : "Record yourself") {
+                    if recorder.isRecording {
+                        recorder.stop()
+                        tickTimer?.invalidate(); tickTimer = nil
+                        if recordedSeconds >= 2.0 {
+                            didRecord = true
+                            tooShort = false
+                        } else {
+                            tooShort = true
+                        }
+                    } else {
+                        recorder.requestPermission { granted in
+                            if granted {
+                                recordedSeconds = 0
+                                tooShort = false
+                                recorder.start(to: clipURL)
+                                tickTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { _ in
+                                    recordedSeconds += 0.1
+                                }
+                            } else {
+                                micDenied = true
+                            }
+                        }
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.red)
+                .controlSize(.large)
+                // Live timer: the kid watches the seconds count up, and
+                // recordings under 2s don't count — no more empty proof.
+                if recorder.isRecording {
+                    Text(recordedSeconds < 2.0
+                         ? String(format: "%.0fs\u{2026} keep talking!", recordedSeconds)
+                         : String(format: "%.0fs \u{2014} good, you can stop!", recordedSeconds))
+                        .font(.headline)
+                        .foregroundColor(recordedSeconds < 2.0 ? .secondary : .green)
+                }
+                if tooShort && !recorder.isRecording {
+                    Text("Too short! Say it properly \u{2014} at least 2 seconds.")
+                        .font(.headline)
+                        .foregroundStyle(.red)
+                }
+                Text("Say the word out loud, then stop.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+        }
+        .padding()
+        .navigationTitle("Teach-Back")
+    }
+}
+
 ///   The recording and both checkmarks live on the phone — nothing uploads.
 ///
 /// Teaching notes:
@@ -493,6 +2573,9 @@ struct MissionDetailView: View {
     @State private var showConfetti = false
     @State private var showingRecorder = false
     @State private var showingGrownUp = false
+    // Re-entrancy guard: blocks rapid double-taps from awarding XP twice
+    // before @AppStorage-backed completedIDs/verifiedIDs update.
+    @State private var xpBusy = false
 
     private var completedIDs: Set<String> {
         (try? JSONDecoder().decode(Set<String>.self, from: completedData)) ?? []
@@ -503,39 +2586,102 @@ struct MissionDetailView: View {
     private var isDone: Bool { completedIDs.contains(mission.id) }
     private var isVerified: Bool { verifiedIDs.contains(mission.id) }
 
+    /// Teen missions skip the grown-up flow entirely: no recording,
+    /// no grown-up sheet — the teen holds to confirm for themselves.
+    private var isTeenMission: Bool { mission.difficulty == "teen" }
+    @State private var holdProgress = 0.0
+    @State private var holdTimer: Timer?
+    private let holdSeconds = 2.5
+
+    /// Teen completion: pays the full verified XP in one go and
+    /// files the mission in BOTH sets (so its card shows the star),
+    /// with the same streak + daily-challenge credit as the
+    /// grown-up verified path — a teen proving it for real counts.
+    private func markTeenDone() {
+        guard !xpBusy, !completedIDs.contains(mission.id) else { return }
+        xpBusy = true
+        var ids = completedIDs
+        var vids = verifiedIDs
+        ids.insert(mission.id)
+        vids.insert(mission.id)
+        totalXP += mission.verifiedXp
+        completedData = (try? JSONEncoder().encode(ids)) ?? Data()
+        verifiedData = (try? JSONEncoder().encode(vids)) ?? Data()
+        // Teen completion sound: the plain ding, not the voice
+        // congratulations (Som's call, 2026-10-23).
+        QuizDing.play()
+        celebrate()
+        lastWin = mission.titleEn
+        Streak.recordMissionDone()
+        if DailyChallenge.today().format == .mission, !Streak.dailyDoneToday {
+            Streak.markDailyDone()
+            totalXP += DailyChallenge.today().xp
+            lastWin = "Daily challenge complete! +15 XP"
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            xpBusy = false
+        }
+    }
+
+    /// The 2.5s hold (mirrors GrownUpSheet's gate): a quick tap
+    /// can't fake it, and letting go resets the fill.
+    private func startTeenHold() {
+        guard !isDone, holdTimer == nil else { return }
+        holdTimer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { _ in
+            holdProgress += 0.05 / holdSeconds
+            if holdProgress >= 1 {
+                cancelTeenHold(reset: false)
+                markTeenDone()
+            }
+        }
+    }
+
+    private func cancelTeenHold(reset: Bool = true) {
+        holdTimer?.invalidate()
+        holdTimer = nil
+        if reset { holdProgress = 0 }
+    }
+
     /// The proof recording's home: the app's documents folder, on-device.
     private var proofURL: URL {
         FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("mission_\(mission.id)_proof.m4a")
     }
 
-    /// Plain path: +xp now. Tapping again un-does — and un-verifies too,
-    /// refunding whichever amount was actually paid out.
-    private func toggleDone() {
+    /// Plain path: +xp once, then locked. No un-do — once a kid does the
+    /// mission, they did it. XP never goes backwards.
+    private func markDone() {
+        guard !xpBusy, !completedIDs.contains(mission.id) else { return }
+        xpBusy = true
         var ids = completedIDs
-        var vids = verifiedIDs
-        if ids.contains(mission.id) {
-            let paid = vids.contains(mission.id) ? mission.verifiedXp : mission.xp
-            ids.remove(mission.id)
-            vids.remove(mission.id)
-            // Never go below zero: XP already spent in the shop stays spent.
-            totalXP = max(0, totalXP - paid)
-        } else {
-            ids.insert(mission.id)
-            totalXP += mission.xp
-            // The win moment: voice cheer + confetti. (Un-completing stays quiet.)
-            WinFanfare.play()
-            celebrate()
-            lastWin = mission.titleEn
+        ids.insert(mission.id)
+        totalXP += mission.xp
+        // The win moment: voice cheer + confetti.
+        WinFanfare.play()
+        celebrate()
+        lastWin = mission.titleEn
+        // Streak: a mission done today keeps the chain alive.
+        Streak.recordMissionDone()
+        // Daily challenge: completing any mission finishes a Mission day.
+        if DailyChallenge.today().format == .mission, !Streak.dailyDoneToday {
+            Streak.markDailyDone()
+            totalXP += DailyChallenge.today().xp
+            lastWin = "Daily challenge complete! +15 XP"
         }
         completedData = (try? JSONEncoder().encode(ids)) ?? Data()
-        verifiedData = (try? JSONEncoder().encode(vids)) ?? Data()
+        // Hold the lock briefly: @AppStorage writes are async, and a second
+        // tap before they land would read the stale "not done" value and
+        // pay XP again. 0.3s is plenty for storage to catch up.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            xpBusy = false
+        }
     }
 
     /// Verified path: pays verifiedXp in TOTAL — just the difference if the
     /// plain path already paid xp. Guarded, so it can never double-pay.
     private func markVerified() {
-        guard !isVerified else { return }
+        guard !isVerified, !xpBusy else { return }
+        xpBusy = true
         var ids = completedIDs
         var vids = verifiedIDs
         if ids.contains(mission.id) {
@@ -550,7 +2696,24 @@ struct MissionDetailView: View {
         WinFanfare.play()
         celebrate()
         lastWin = mission.titleEn
+        // Streak parity with markDone (audit fix, 2026-10-21): proving a
+        // mission is the most legitimate completion there is, so it must
+        // count for the streak and finish a Mission-day challenge too.
+        // Before this, a Prove-it-only day silently earned no streak
+        // credit and could break the chain.
+        Streak.recordMissionDone()
+        if DailyChallenge.today().format == .mission, !Streak.dailyDoneToday {
+            Streak.markDailyDone()
+            totalXP += DailyChallenge.today().xp
+            lastWin = "Daily challenge complete! +15 XP"
+        }
+        // Same async-storage guard as markDone: hold the lock until the
+        // @AppStorage write lands, so a double-tap can't double-pay.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            xpBusy = false
+        }
     }
+
 
     /// Fire the confetti so it can never get "stuck": drop any in-flight
     /// burst first, then raise a fresh one on the next runloop turn.
@@ -597,7 +2760,9 @@ struct MissionDetailView: View {
                 }
 
                 if isVerified {
-                    Label("Verified! A grown-up confirmed this mission.",
+                    Label(isTeenMission
+                          ? "Done! You confirmed this one yourself."
+                          : "Verified! A grown-up confirmed this mission.",
                           systemImage: "star.circle.fill")
                         .font(.headline)
                         .foregroundStyle(.orange)
@@ -607,16 +2772,47 @@ struct MissionDetailView: View {
                         .clipShape(RoundedRectangle(cornerRadius: 12))
                 }
 
-                Button(action: toggleDone) {
-                    Label(isDone ? "Done!" : "I did it! +\(mission.xp) XP",
-                          systemImage: isDone ? "checkmark.circle.fill" : "circle")
-                        .font(.title3)
-                        .frame(maxWidth: .infinity)
+                if isTeenMission {
+                    if !isDone {
+                        // Hold-to-confirm: fill the bar over 2.5s to
+                        // complete — a mash-tap can't fake a hold.
+                        ZStack(alignment: .leading) {
+                            RoundedRectangle(cornerRadius: 16)
+                                .fill(Color(.systemGroupedBackground))
+                            GeometryReader { geo in
+                                RoundedRectangle(cornerRadius: 16)
+                                    .fill(Color.green)
+                                    .frame(width: geo.size.width * max(0, min(1, holdProgress)))
+                            }
+                            Text(holdProgress >= 1 ? "✓" : "✅ Hold to complete — +\(mission.verifiedXp) XP")
+                                .font(.title3)
+                                .bold()
+                                .frame(maxWidth: .infinity)
+                        }
+                        .frame(height: 60)
+                        .gesture(
+                            DragGesture(minimumDistance: 0)
+                                .onChanged { _ in startTeenHold() }
+                                .onEnded { _ in cancelTeenHold() }
+                        )
+                        .accessibilityLabel("Press and hold to complete the mission")
+                        Text("No grown-up needed — teens confirm their own missions. Press and hold until it fills.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                } else {
+                    Button(action: markDone) {
+                        Label(isDone ? "Done!" : "I did it! +\(mission.xp) XP",
+                              systemImage: isDone ? "checkmark.circle.fill" : "circle")
+                            .font(.title3)
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(isDone ? .green : .blue)
+                    .disabled(isDone || xpBusy)
                 }
-                .buttonStyle(.bordered)
-                .tint(isDone ? .green : .blue)
 
-                if !isVerified {
+                if !isVerified && !isTeenMission {
                     Button(action: { showingRecorder = true }) {
                         // Honest label: if "I did it!" already paid xp,
                         // Prove-it only pays the difference to verifiedXp.
@@ -685,6 +2881,7 @@ struct MissionDetailView: View {
                 fileExists = mission.hasAudio
             }
             if fileExists {
+                player?.pause()
                 player = AVPlayer(url: url)
                 player?.play()
                 return
@@ -706,6 +2903,31 @@ struct DeckCover: View {
             if deck.id == "colors" {
                 // No photo cover for colors — its own swatches are the cover.
                 colorDots
+            } else if deck.id == "texting" {
+                // Text Pack: chat bubble symbol.
+                Image(systemName: "message.fill")
+                    .font(.largeTitle)
+                    .foregroundStyle(.blue)
+            } else if deck.id == "slang" {
+                // Slang: fire symbol.
+                Image(systemName: "flame.fill")
+                    .font(.largeTitle)
+                    .foregroundStyle(.orange)
+            } else if deck.id == "comebacks" {
+                // Comebacks: speech bubbles.
+                Image(systemName: "bubble.left.and.bubble.right.fill")
+                    .font(.largeTitle)
+                    .foregroundStyle(.purple)
+            } else if deck.id == "captions" {
+                // Captions: camera symbol.
+                Image(systemName: "camera.fill")
+                    .font(.largeTitle)
+                    .foregroundStyle(.pink)
+            } else if deck.id == "lyrics" {
+                // Lyric Breakdowns: music note.
+                Image(systemName: "music.note")
+                    .font(.largeTitle)
+                    .foregroundStyle(.green)
             } else if let cover = deck.coverImage, cover.hasPrefix("/") {
                 AsyncImage(url: URL(string: GharAPI.baseURLString + cover)) { phase in
                     switch phase {
@@ -1040,6 +3262,8 @@ func lessonDestination(for deck: Deck) -> some View {
         ColorsView(deck: deck)
     } else if deck.kind == "numbers" {
         NumbersView(deck: deck)
+    } else if deck.kind == "texting" {
+        TextPackView(deck: deck)
     } else {
         DeckView(deck: deck)
     }
@@ -1688,6 +3912,7 @@ struct TeachingCard: View {
     private func speak() {
         if word.hasAudio == true,
            let url = URL(string: GharAPI.baseURLString + word.audioUrl) {
+            player?.pause()
             player = AVPlayer(url: url)
             player?.play()
         } else {
@@ -1940,7 +4165,8 @@ struct FestivalView: View {
                     .padding(.horizontal)
                 }
                 ForEach(deck.words) { word in
-                    WordRow(word: word, onPlay: play(word:))
+                    WordRow(word: word, onPlay: play(word:),
+                            deckID: deck.id, deckWords: deck.words)
                         .onTapGesture { teachingWord = word }
                 }
                 .padding(.horizontal)
@@ -1958,7 +4184,10 @@ struct FestivalView: View {
 
     /// Same as DeckView's: builds the full audio URL and plays Som's recording.
     private func play(word: Word) {
+        DeckProgress.markHeard(word.id)
+        DeckProgress.evaluate(deck)
         guard let url = URL(string: GharAPI.baseURLString + word.audioUrl) else { return }
+        player?.pause()
         player = AVPlayer(url: url)
         player?.play()
     }
@@ -1970,6 +4199,7 @@ struct FestivalView: View {
         if phrase.hasAudio == true,
            let audioUrl = phrase.audioUrl,
            let url = URL(string: GharAPI.baseURLString + audioUrl) {
+            player?.pause()
             player = AVPlayer(url: url)
             player?.play()
         } else {
@@ -2057,6 +4287,8 @@ struct ConversationsView: View {
             }
         }
         .animation(.spring(response: 0.35, dampingFraction: 0.8), value: teachingWord?.id)
+        .onAppear { DeckProgress.evaluate(deck) }
+        .onDisappear { DeckProgress.evaluate(deck) }
     }
 }
 
@@ -2077,6 +4309,9 @@ final class DialogueSpeaker: NSObject, ObservableObject, AVSpeechSynthesizerDele
     private nonisolated(unsafe) let synth = AVSpeechSynthesizer()
     private var onFinish: (() -> Void)?
     private var onPreempt: (() -> Void)?
+    /// Keeps a recording alive while it plays.
+    private var player: AVPlayer?
+    private var playerObserver: NSObjectProtocol?
 
     override init() {
         super.init()
@@ -2086,12 +4321,52 @@ final class DialogueSpeaker: NSObject, ObservableObject, AVSpeechSynthesizerDele
     /// Speak one line. `onFinish` runs on the main thread when the line ends
     /// on its own; `onPreempt` runs if a later `play` cuts it off first.
     /// Always called on the main thread (button taps and delegate callbacks).
-    func play(nepali: String, romanized: String, onFinish: @escaping () -> Void, onPreempt: @escaping () -> Void) {
+    ///
+    /// His recording wins when it exists — TTS is the fallback.
+    func play(word: Word, onFinish: @escaping () -> Void, onPreempt: @escaping () -> Void) {
+        DeckProgress.markHeard(word.id)
         if self.onFinish != nil {
             self.onPreempt?()   // someone else was mid-line — reset their UI first
         }
         self.onFinish = onFinish
         self.onPreempt = onPreempt
+        stopAudio()
+
+        if word.hasAudio == true,
+           let url = URL(string: GharAPI.baseURLString + word.audioUrl) {
+            let item = AVPlayerItem(url: url)
+            player = AVPlayer(playerItem: item)
+            // When the recording ends, fire the finish callback so the
+            // conversation auto-play steps to the next line.
+            playerObserver = NotificationCenter.default.addObserver(
+                forName: .AVPlayerItemDidPlayToEndTime,
+                object: item, queue: .main
+            ) { [weak self] _ in
+                guard let self = self else { return }
+                let cb = self.onFinish
+                self.onFinish = nil
+                self.onPreempt = nil
+                self.stopAudio()
+                if let cb = cb { cb() }
+            }
+            player?.play()
+            return
+        }
+        playTTS(nepali: word.devanagari, romanized: word.romanized)
+    }
+
+    /// TTS-only path (for callers without a Word).
+    func play(nepali: String, romanized: String, onFinish: @escaping () -> Void, onPreempt: @escaping () -> Void) {
+        if self.onFinish != nil {
+            self.onPreempt?()
+        }
+        self.onFinish = onFinish
+        self.onPreempt = onPreempt
+        stopAudio()
+        playTTS(nepali: nepali, romanized: romanized)
+    }
+
+    private func playTTS(nepali: String, romanized: String) {
         synth.stopSpeaking(at: .immediate)
         let utterance: AVSpeechUtterance
         if let nepaliVoice = AVSpeechSynthesisVoice(language: "ne-NP") {
@@ -2111,6 +4386,17 @@ final class DialogueSpeaker: NSObject, ObservableObject, AVSpeechSynthesizerDele
     func stop() {
         onFinish = nil
         onPreempt = nil
+        stopAudio()
+    }
+
+    /// Stop any in-flight audio (recording or TTS) without firing callbacks.
+    private func stopAudio() {
+        if let obs = playerObserver {
+            NotificationCenter.default.removeObserver(obs)
+            playerObserver = nil
+        }
+        player?.pause()
+        player = nil
         synth.stopSpeaking(at: .immediate)
     }
 
@@ -2154,7 +4440,7 @@ final class DialoguePlayer: ObservableObject {
             talkingSpeaker = word.speaker
             speakingWord = word
         }
-        speaker.play(nepali: word.devanagari, romanized: word.romanized,
+        speaker.play(word: word,
             onFinish: { [weak self] in
                 guard let self = self, self.generation == g else { return }
                 withAnimation(.easeOut(duration: 0.25)) {
@@ -2195,7 +4481,7 @@ final class DialoguePlayer: ObservableObject {
             talkingSpeaker = word.speaker
             speakingWord = word
         }
-        speaker.play(nepali: word.devanagari, romanized: word.romanized,
+        speaker.play(word: word,
             onFinish: { [weak self] in
                 guard let self = self, self.generation == g else { return }
                 self.didFinishLine()
@@ -2236,7 +4522,7 @@ final class DialoguePlayer: ObservableObject {
     }
 }
 
-enum PersonAge { case older, younger }
+enum PersonAge { case boy, girl }
 
 /// A and B as real illustrations (PNGs in Assets.xcassets),
 /// instead of drawn shapes. Two frames per person — mouth closed and mouth
@@ -2262,10 +4548,10 @@ struct IllustratedPerson: View {
     @State private var nod = false
 
     private var neutral: UIImage? {
-        age == .older ? Portraits.olderNeutral : Portraits.youngerNeutral
+        age == .boy ? Portraits.boyNeutral : Portraits.girlNeutral
     }
     private var mouthOpen: UIImage? {
-        age == .older ? Portraits.olderTalking : Portraits.youngerTalking
+        age == .boy ? Portraits.boyTalking : Portraits.girlTalking
     }
 
     var body: some View {
@@ -2275,7 +4561,7 @@ struct IllustratedPerson: View {
                     Image(uiImage: uiImage)
                         .resizable()
                         .scaledToFit()
-                        .frame(height: age == .older ? 148 : 126)
+                        .frame(height: age == .boy ? 148 : 126)
                 } else {
                     // Portrait failed to decode — a placeholder so the card never breaks.
                     Image(systemName: "person.circle.fill")
@@ -2299,7 +4585,7 @@ struct IllustratedPerson: View {
                 HStack(spacing: 3) {
                     ForEach(0..<3, id: \.self) { i in
                         RoundedRectangle(cornerRadius: 2)
-                            .fill(age == .older ? .blue : .orange)
+                            .fill(age == .boy ? .blue : .orange)
                             .frame(width: 4, height: 8 + CGFloat(i) * 5)
                     }
                 }
@@ -2367,10 +4653,10 @@ struct NowSpeakingBubble: View {
 /// drag new art into the matching imageset to swap a character's look.)
 /// `static let` = loaded lazily once, on first use — not at app launch.
 enum Portraits {
-    static let olderNeutral = UIImage(named: "older-neutral")
-    static let olderTalking = UIImage(named: "older-talking")
-    static let youngerNeutral = UIImage(named: "younger-neutral")
-    static let youngerTalking = UIImage(named: "younger-talking")
+    static let boyNeutral = UIImage(named: "boy-neutral")
+    static let boyTalking = UIImage(named: "boy-talking")
+    static let girlNeutral = UIImage(named: "girl-neutral")
+    static let girlTalking = UIImage(named: "girl-talking")
 }
 
 /// A downward triangle — the little tail on a chat bubble.
@@ -2550,10 +4836,10 @@ struct DialogueCard: View {
                 .transition(.opacity.combined(with: .move(edge: .top)))
             }
             // The stage: two friends facing each other —
-            // A the older, B the younger, as real illustrations.
+            // A the boy, B the girl, as real illustrations.
             HStack(alignment: .bottom, spacing: 0) {
                 VStack(spacing: 4) {
-                    IllustratedPerson(age: .older, facingRight: true,
+                    IllustratedPerson(age: .boy, facingRight: true,
                                       talking: player.talkingSpeaker == "A",
                                       listening: player.talkingSpeaker == "B")
                     Text("A")
@@ -2567,7 +4853,7 @@ struct DialogueCard: View {
                     .padding(.bottom, 44)
                 Spacer()
                 VStack(spacing: 4) {
-                    IllustratedPerson(age: .younger, facingRight: false,
+                    IllustratedPerson(age: .girl, facingRight: false,
                                       talking: player.talkingSpeaker == "B",
                                       listening: player.talkingSpeaker == "A")
                     Text("B")
@@ -2584,7 +4870,7 @@ struct DialogueCard: View {
                     let isA = word.speaker != "B"   // a missing speaker reads as A
                     DialogueBubble(word: word,
                                    isA: isA,
-                                   talking: word.speaker != nil && player.talkingSpeaker == word.speaker,
+                                   talking: player.autoIndex == idx || (player.autoIndex == nil && player.speakingWord?.id == word.id),
                                    onTap: { player.tapLine(idx) },
                                    onInfo: { onInfo(word) })
                 }
@@ -2611,6 +4897,7 @@ struct ConvoPracticeView: View {
     let deck: Deck
     @AppStorage("ghar.xp.total") private var totalXP = 0
     @AppStorage("ghar.last.win") private var lastWin = ""
+    @StateObject private var speaker = DialogueSpeaker()
 
     @State private var round = 0
     @State private var options: [Word] = []
@@ -2619,6 +4906,9 @@ struct ConvoPracticeView: View {
     @State private var correctCount = 0
     @State private var finished = false
     @State private var showConfetti = false
+    // Real XP earned this run (missed replies pay +2, not +5) — the
+    // finish screen shows this instead of correctCount * 5.
+    @State private var earnedXP = 0
 
     private let script: [(prompt: String, answer: String, wrong: [String])] = [
         ("convo_kasto", "convo_thik", ["convo_hoina", "convo_dhanyabad"]),
@@ -2642,12 +4932,13 @@ struct ConvoPracticeView: View {
                 Text("\(correctCount) out of \(script.count) perfect replies")
                     .font(.headline)
                     .foregroundStyle(.secondary)
-                Text("+\(correctCount * 5) XP")
+                Text("+\(earnedXP) XP")
                     .font(.title3).bold()
                     .foregroundStyle(.green)
                 Button("Practice again") {
                     round = 0
                     correctCount = 0
+                    earnedXP = 0
                     finished = false
                     startRound()
                 }
@@ -2666,7 +4957,7 @@ struct ConvoPracticeView: View {
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                     Button {
-                        NepaliSpeaker.say(nepali: prompt.devanagari, romanized: prompt.romanized)
+                        speaker.play(word: prompt, onFinish: {}, onPreempt: {})
                     } label: {
                         Label("Hear it again", systemImage: "speaker.wave.2.fill")
                     }
@@ -2679,6 +4970,11 @@ struct ConvoPracticeView: View {
 
                 Text("Your reply:")
                     .font(.headline)
+                // Visible stakes (Som's ask 2026-10-19): the kid SEES the
+                // value drop the moment a miss lands — +5 clean, +2 after.
+                Text(wrongIDs.isEmpty ? "⭐ +5 XP" : "😅 +2 XP now")
+                    .font(.subheadline)
+                    .foregroundStyle(wrongIDs.isEmpty ? .green : .orange)
                 ForEach(options) { option in
                     Button(action: { answer(option, correctID: correctID) }) {
                         VStack(spacing: 2) {
@@ -2726,7 +5022,7 @@ struct ConvoPracticeView: View {
         solved = false
         wrongIDs = []
         if let prompt = word(exchange.prompt) {
-            NepaliSpeaker.say(nepali: prompt.devanagari, romanized: prompt.romanized)
+            speaker.play(word: prompt, onFinish: {}, onPreempt: {})
         }
     }
 
@@ -2734,14 +5030,20 @@ struct ConvoPracticeView: View {
         if option.id == correctID {
             solved = true
             correctCount += 1
-            totalXP += 5
+            // Anti-mash (Som's call 2026-10-19): a clean first-try pays
+            // +5; any miss on this question drops it to +2.
+            totalXP += wrongIDs.isEmpty ? 5 : 2
+            earnedXP += wrongIDs.isEmpty ? 5 : 2
+            QuizStats.recordCorrect()
             // You "say" your line out loud — hearing yourself nail the
             // reply is the reward. (No voice fanfare here: it would talk
             // over your line. The big cheer waits for the finish.)
-            NepaliSpeaker.say(nepali: option.devanagari, romanized: option.romanized)
+            speaker.play(word: option, onFinish: {}, onPreempt: {})
             celebrate()
         } else {
             wrongIDs.insert(option.id)
+            WrongAnswerFeedback.play()
+            QuizStats.recordWrong()
         }
     }
 
@@ -2782,23 +5084,59 @@ struct ConvoPracticeView: View {
 struct QuizMenuView: View {
     let pack: ContentPack
 
+    @AppStorage("ghar.premium.unlocked") private var isUnlocked = false
     @AppStorage("ghar.xp.total") private var totalXP = 0
+    @AppStorage("ghar.shop.owned") private var ownedData = Data()
 
-    /// (title, icon, accent, words, picture?) per section, in display order.
+    private var ownedIDs: Set<String> {
+        (try? JSONDecoder().decode(Set<String>.self, from: ownedData)) ?? []
+    }
+
+    /// The quiz sticker ladder, in earn order.
+    private var stickerLadder: [(id: String, icon: String, name: String, need: Int)] {
+        [("quiz50", "✨", "Jhilimili", 50),
+         ("quiz100", "☀️", "Surya", 100),
+         ("quiz250", "🏔️", "Himal", 250),
+         ("quiz500", "🗻", "Sagarmatha", 500)]
+    }
+
+    private let tierTitles = ["beginner": "🌱 Beginner", "intermediate": "🌿 Intermediate", "hard": "🌳 Hard", "teen": "🔥 Teen"]
+
+    /// (title, icon, accent, words, picture?) per section, grouped by difficulty tier
+    /// to match the Lessons tab. Balloon Pop stays featured at the top (it plays
+    /// words from every deck, so it belongs to no tier).
     /// Animals and Colors get their own cards; everyday words play together
     /// under Words. Dashain and Tihar are PICTURE quizzes: their words have
     /// beautiful illustrations and no recordings yet, so kids play with eyes
     /// instead of ears. Colors is a LISTENING quiz with swatch answers:
     /// hear the Nepali word, tap the matching color.
-    private var sections: [(title: String, icon: String, accent: Color, words: [Word], picture: Bool)] {
+    private var tieredSections: [(tier: String, title: String, sections: [(title: String, icon: String, accent: Color, words: [Word], picture: Bool)])] {
         let wordsFor = { (id: String) in pack.decks.first { $0.id == id }?.words ?? [] }
-        let rest = pack.decks.filter { !["animals", "colors", "dashain", "tihar"].contains($0.id) }.flatMap { $0.words }
+        let wordsForTier = { (tier: String, exclude: [String]) in
+            pack.decks.filter { ($0.difficulty ?? "beginner") == tier && !exclude.contains($0.id) }.flatMap { $0.words }
+        }
         return [
-            ("Words", "💬", .blue, rest, false),
-            ("Animals", "🐾", .green, wordsFor("animals"), false),
-            ("Colors", "🎨", .pink, wordsFor("colors"), false),
-            ("Dashain", "🪔", .orange, wordsFor("dashain"), true),
-            ("Tihar", "✨", .purple, wordsFor("tihar"), true),
+            ("beginner", tierTitles["beginner"]!, [
+                ("Words", "💬", .blue, wordsForTier("beginner", ["animals", "colors"]), false),
+                ("Animals", "🐾", .green, wordsFor("animals"), false),
+                ("Colors", "🎨", .pink, wordsFor("colors"), false),
+            ]),
+            ("intermediate", tierTitles["intermediate"]!, [
+                ("Words", "📚", .blue, wordsForTier("intermediate", []), false),
+            ]),
+            ("hard", tierTitles["hard"]!, [
+                ("Words", "🧠", .blue, wordsForTier("hard", ["dashain", "tihar", "months"]), false),
+                ("Months", "📅", .teal, wordsFor("months"), false),
+                ("Dashain", "🪔", .orange, wordsFor("dashain"), true),
+                ("Tihar", "✨", .purple, wordsFor("tihar"), true),
+            ]),
+            ("teen", tierTitles["teen"]!, [
+                ("Text Pack", "💬", .blue, wordsFor("texting"), false),
+                ("Slang", "🔥", .orange, wordsFor("slang"), false),
+                ("Comebacks", "💥", .purple, wordsFor("comebacks"), false),
+                ("Captions", "📸", .pink, wordsFor("captions"), false),
+                ("Lyrics", "🎵", .green, wordsFor("lyrics"), false),
+            ]),
         ]
     }
 
@@ -2824,40 +5162,148 @@ struct QuizMenuView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 16))
                 .shadow(color: .black.opacity(0.06), radius: 4, x: 0, y: 2)
 
-                ForEach(sections.indices, id: \.self) { i in
-                    let section = sections[i]
-                    let audible = section.words.filter { $0.hasAudio ?? true }
-                    let pictured = section.words.filter { $0.image != nil || $0.colorHex != nil }
-                    if !audible.isEmpty, !section.picture {
-                        // Listening quiz: hear the word, tap what it means.
+                // Quiz sticker rewards: the ladder the kid is climbing,
+                // with live progress toward the next sticker.
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Text("🏆 Quiz Rewards")
+                            .font(.headline)
+                        Spacer()
+                        Text("\(QuizStats.correctTotal) answers right")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    HStack(spacing: 10) {
+                        ForEach(stickerLadder, id: \.id) { step in
+                            let earned = ownedIDs.contains(step.id)
+                            VStack(spacing: 2) {
+                                Text(step.icon)
+                                    .font(.system(size: 26))
+                                    .grayscale(earned ? 0 : 1)
+                                    .opacity(earned ? 1 : 0.45)
+                                Text(step.name)
+                                    .font(.caption2).bold()
+                                Text(earned ? "Earned! ✅" : "\(min(QuizStats.correctTotal, step.need))/\(step.need)")
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+                            .frame(maxWidth: .infinity)
+                        }
+                    }
+                }
+                .padding()
+                .background(Color(.systemBackground))
+                .clipShape(RoundedRectangle(cornerRadius: 16))
+                .shadow(color: .black.opacity(0.06), radius: 4, x: 0, y: 2)
+
+                // Balloon Pop: hear the word, pop its balloon. 60-second rounds.
+                // Featured at the top — it plays words from every deck, all levels.
+                NavigationLink {
+                    BalloonPopView(words: pack.decks.flatMap { $0.words })
+                } label: {
+                    quizCard(title: "Balloon Pop", icon: "🎈",
+                             accent: .red,
+                             subtitle: "All levels · hear the word, pop its balloon! · 60s rounds",
+                             count: 0)
+                }
+                .buttonStyle(.plain)
+
+                // Bagh-Chal: the classic Nepali tiger-and-goats board game.
+                // The kid is the goats; the phone plays the tigers.
+                NavigationLink {
+                    BaghChalView()
+                } label: {
+                    quizCard(title: "Bagh-Chal", icon: "🐯",
+                             accent: .orange,
+                             subtitle: "All levels · trap the tigers with your goats!",
+                             count: 0)
+                }
+                .buttonStyle(.plain)
+
+                ForEach(tieredSections, id: \.tier) { tierGroup in
+                    // Tier header, matching the Lessons tab.
+                    HStack {
+                        Text(tierGroup.title)
+                            .font(.title2)
+                            .bold()
+                        Spacer()
+                    }
+                    .padding(.horizontal, 4)
+                    .padding(.top, 8)
+
+                    // Sentence games live under Intermediate.
+                    if tierGroup.tier == "intermediate" {
+                        // Sentences: build your first Nepali sentences (यो ___ हो।).
+                        if let lesson = SentenceLessons.lesson1(words: pack.decks.flatMap { $0.words }) {
+                            NavigationLink {
+                                // Premium gate (audit, 2026-10-23): Intermediate
+                                // learning content, same rule as the decks.
+                                if isUnlocked { SentencesView(lesson: lesson) } else { PaywallView() }
+                            } label: {
+                                SentencesEntryCard(lesson: lesson)
+                            }
+                            .buttonStyle(.plain)
+                        }
+
+                        // Sentence Builder: tap word tiles in order (म ___ ___छु।).
                         NavigationLink {
-                            QuizView(words: section.words)
-                                .navigationTitle("\(section.title) Quiz")
+                            if isUnlocked { SentenceBuilderView(words: pack.decks.flatMap { $0.words }) } else { PaywallView() }
                         } label: {
-                            quizCard(title: section.title, icon: section.icon,
-                                     accent: section.accent,
-                                     subtitle: "Hear the word, tap what it means",
-                                     count: section.words.count)
+                            SentenceBuilderEntryCard()
                         }
                         .buttonStyle(.plain)
-                    } else if section.picture, !pictured.isEmpty {
-                        // Picture quiz: see the illustration, tap what it means.
-                        NavigationLink {
-                            PictureQuizView(words: section.words)
-                                .navigationTitle("\(section.title) Quiz")
-                        } label: {
+                    }
+
+                    ForEach(tierGroup.sections.indices, id: \.self) { i in
+                        let section = tierGroup.sections[i]
+                        let audible = section.words.filter { $0.hasAudio ?? true }
+                        let pictured = section.words.filter { $0.image != nil || $0.colorHex != nil }
+                        if tierGroup.tier == "teen", section.title == "Lyrics", !section.words.isEmpty {
+                            // Lyrics quiz: "What does this song title mean?"
+                            // The lyric english fields are paragraphs, so the
+                            // options are the short quizShort glosses instead.
+                            NavigationLink {
+                                LyricsQuizView(words: section.words)
+                                    .navigationTitle("Lyrics Quiz")
+                            } label: {
+                                quizCard(title: section.title, icon: section.icon,
+                                         accent: section.accent,
+                                         subtitle: "See the title, tap what it means",
+                                         count: section.words.count)
+                            }
+                            .buttonStyle(.plain)
+                        } else if !audible.isEmpty, !section.picture {
+                            // Listening quiz: hear the word, tap what it means.
+                            // Teen tier uses Prakash's voice for right/wrong feedback.
+                            NavigationLink {
+                                QuizFeedView(words: section.words, isTeen: tierGroup.tier == "teen")
+                                    .navigationTitle("\(section.title) Quiz")
+                            } label: {
+                                quizCard(title: section.title, icon: section.icon,
+                                         accent: section.accent,
+                                         subtitle: "Hear the word, tap what it means",
+                                         count: section.words.count)
+                            }
+                            .buttonStyle(.plain)
+                        } else if section.picture, !pictured.isEmpty {
+                            // Picture quiz: see the illustration, tap what it means.
+                            NavigationLink {
+                                PictureQuizFeedView(words: section.words)
+                                    .navigationTitle("\(section.title) Quiz")
+                            } label: {
+                                quizCard(title: section.title, icon: section.icon,
+                                         accent: section.accent,
+                                         subtitle: "See the picture, tap what it means",
+                                         count: section.words.count)
+                            }
+                            .buttonStyle(.plain)
+                        } else {
+                            // Nothing to play with yet — this card enables itself
+                            // once recordings or illustrations exist.
                             quizCard(title: section.title, icon: section.icon,
-                                     accent: section.accent,
-                                     subtitle: "See the picture, tap what it means",
-                                     count: section.words.count)
+                                     accent: .gray, subtitle: "Coming soon", count: 0)
+                                .opacity(0.45)
                         }
-                        .buttonStyle(.plain)
-                    } else {
-                        // Nothing to play with yet — this card enables itself
-                        // once recordings or illustrations exist.
-                        quizCard(title: section.title, icon: section.icon,
-                                 accent: .gray, subtitle: "Coming soon", count: 0)
-                            .opacity(0.45)
                     }
                 }
             }
@@ -2894,11 +5340,615 @@ struct QuizMenuView: View {
     }
 }
 
+/// One-card-per-swipe vertical pager for the quiz feeds.
+///
+/// The native paging ScrollView projects a hard flick's landing from
+/// its velocity, so a fast swipe jumps TWO cards — kids hit this
+/// constantly, and near the end of a set it lands on the "Set
+/// complete!" card, silently skipping the last question or two
+/// (the cousin's report, 2026-10-23; gentler swipes never showed
+/// it). This pager tracks the finger 1:1 and one gesture can only
+/// ever move a single page.
+///
+/// IDENTITY CONTRACT: pages are positioned by index, so callers
+/// must stamp each page's content with `.id(...)` from its data
+/// (the card's UUID). Without it, a re-dealt set reuses the old
+/// card views at each position — solved state and all (the
+/// "answers already shown after Shuffle & keep going" bug,
+/// 2026-10-23).
+struct StrictVerticalPager<Content: View>: View {
+    let pageCount: Int
+    @Binding var page: Int
+    @ViewBuilder let content: (Int) -> Content
+    @State private var dragY: CGFloat = 0
+
+    var body: some View {
+        GeometryReader { geo in
+            let h = geo.size.height
+            VStack(spacing: 0) {
+                ForEach(0..<pageCount, id: \.self) { i in
+                    // Windowed rendering: only the current page and
+                    // two either side are real views; the rest are
+                    // empty placeholders of the same size. Rendering
+                    // every card at once (49 for the alphabet set,
+                    // each picture card decoding a full-size photo)
+                    // made the feeds lag — the old lazy scroll view
+                    // only ever built the cards near you.
+                    if abs(i - page) <= 2 {
+                        content(i)
+                            .frame(width: geo.size.width, height: h)
+                    } else {
+                        Color.clear
+                            .frame(width: geo.size.width, height: h)
+                    }
+                }
+            }
+            .offset(y: -CGFloat(page) * h + dragOffset)
+            .contentShape(Rectangle())
+            .gesture(
+                DragGesture(minimumDistance: 12)
+                    .onChanged { v in dragY = v.translation.height }
+                    .onEnded { v in
+                        let projected = v.predictedEndTranslation.height
+                        var target = page
+                        if projected < -70, page < pageCount - 1 { target = page + 1 }
+                        if projected > 70, page > 0 { target = page - 1 }
+                        withAnimation(.spring(response: 0.32, dampingFraction: 0.92)) {
+                            page = target
+                            dragY = 0
+                        }
+                    }
+            )
+        }
+    }
+
+    /// Rubber-band past the first/last page so the ends feel solid.
+    private var dragOffset: CGFloat {
+        if page == 0, dragY > 0 { return dragY * 0.35 }
+        if pageCount > 0, page == pageCount - 1, dragY < 0 { return dragY * 0.35 }
+        return dragY
+    }
+}
+
 /// The Quiz tab: a listening game. Hear a Nepali word, tap what it means.
 /// +5 XP per correct answer — fed into the SAME total as missions.
 ///
 /// Teaching notes:
 /// - A "question" is just @State: the `current` word, the shuffled
+/// TikTok-style quiz feed: one question per full-screen card, swipe up
+/// for the next. Audio NEVER auto-plays — the kid taps the big speaker
+/// button, so the word you hear always matches the card you see.
+/// In blitz mode it's a 5-question sprint with a finish screen.
+struct QuizFeedView: View {
+    let words: [Word]
+    var blitzMode = false
+    var isTeen = false
+    @Environment(\.dismiss) private var dismiss
+    @AppStorage("ghar.xp.total") private var totalXP = 0
+    @AppStorage("ghar.last.win") private var lastWin = ""
+    @AppStorage("ghar.premium.unlocked") private var isUnlocked = false
+    @AppStorage("ghar.quiz.freeUsed") private var freeUsed = 0
+    @State private var showingPaywall = false
+    @State private var player: AVPlayer?
+    @State private var cards: [QuizCardData] = []
+    @State private var page = 0
+    @State private var solvedCount = 0
+    @State private var blitzDone = false
+    @State private var showConfetti = false
+
+    struct QuizCardData: Identifiable {
+        // Fresh UUID per deal (not the word id): reshuffles get new
+        // identities so the pager never jumps to a stale position.
+        let id = UUID()
+        let word: Word
+        let options: [Word]
+    }
+
+    var body: some View {
+        if !isUnlocked && freeUsed >= 5 {
+            // Free tier lock: 5 questions total, then the paywall.
+            VStack(spacing: 16) {
+                Text("\u{1F512}").font(.system(size: 56))
+                Text("You've used your 5 free questions!")
+                    .font(.title2).bold()
+                    .multilineTextAlignment(.center)
+                Text("Unlock unlimited quizzes with Ghar Premium.")
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                Button("See Premium") { showingPaywall = true }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+            }
+            .padding()
+            .sheet(isPresented: $showingPaywall) { PaywallView() }
+        } else if blitzMode && blitzDone {
+            VStack(spacing: 16) {
+                Text("\u{1F389}").font(.system(size: 64))
+                Text("Quiz Blitz complete!")
+                    .font(.title2).bold()
+                Text("5 questions down. See you tomorrow.")
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                Button("Done") { dismiss() }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+            }
+            .padding()
+        } else if cards.isEmpty {
+            // First frame, cards not dealt yet: a neutral loading
+            // beat. Without this gate the pager opens on its only
+            // page — the "Set complete!" end card — for a visible
+            // flash before deal() lands: the first-question glitch.
+            VStack(spacing: 12) {
+                ProgressView()
+                Text("Shuffling questions…")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .onAppear { deal() }
+        } else {
+            StrictVerticalPager(pageCount: cards.count + (blitzMode ? 0 : 1), page: $page) { i in
+                if i < cards.count {
+                    QuizFeedCard(data: cards[i], onPlay: playWord,
+                                 onSolve: handleSolve, isTeen: isTeen)
+                        .id(cards[i].id)
+                } else {
+                    // End of the set: reshuffle and keep going.
+                    VStack(spacing: 16) {
+                        Text("\u{1F389}").font(.system(size: 64))
+                        Text("Set complete!")
+                            .font(.title2).bold()
+                        Button("Shuffle & keep going") { deal() }
+                            .buttonStyle(.borderedProminent)
+                            .controlSize(.large)
+                    }
+                }
+            }
+            // Auto-play the card that settles on screen — never a preloaded
+            // neighbor. Swiping away stops its audio first.
+            .onChange(of: page) { _, newPage in
+                player?.pause()
+                if newPage < cards.count {
+                    playWord(cards[newPage].word)
+                }
+            }
+            .overlay {
+                if showConfetti {
+                    ConfettiBurst()
+                        .allowsHitTesting(false)
+                        .task {
+                            try? await Task.sleep(nanoseconds: 1_200_000_000)
+                            showConfetti = false
+                        }
+                }
+            }
+        }
+    }
+
+    /// Deal a shuffled set of question cards. Free tier is capped so the
+    /// lifetime 5-question limit holds.
+    private func deal() {
+        var audible = words.filter { $0.hasAudio ?? true }
+        if blitzMode {
+            // Lyrics titles have their own quiz now (LyricsQuizView:
+            // short glosses, no audio) — the Blitz is a listening
+            // sprint over plain vocab, so they stay out of this pool.
+            audible = audible.filter { ($0.quizShort ?? "").isEmpty }
+        }
+        var count = blitzMode ? 5 : audible.count
+        if !isUnlocked {
+            count = min(count, max(0, 5 - freeUsed))
+            freeUsed += count
+        }
+        cards = audible.shuffled().prefix(count).map { word in
+            let distractors = audible.filter { $0.id != word.id }.shuffled().prefix(3)
+            return QuizCardData(word: word,
+                                options: ([word] + distractors).shuffled())
+        }
+        solvedCount = 0
+        blitzDone = false
+        // Back to the first card of the fresh set. Already on page 0
+        // the page-change hook won't fire, so play the word directly;
+        // from any other page the hook plays it when we land.
+        if page == 0 {
+            if let first = cards.first {
+                // A small beat so the first word doesn't start under
+                // the navigation animation; skipped if the kid has
+                // already swiped on (the settle hook owns that card).
+                let dealtID = first.word.id
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                    if page == 0, cards.first?.word.id == dealtID {
+                        playWord(first.word)
+                    }
+                }
+            }
+        } else {
+            page = 0
+        }
+    }
+
+    /// Explicit tap only — pause anything playing first so audio from two
+    /// cards can never overlap.
+    private func playWord(_ word: Word) {
+        player?.pause()
+        guard let url = URL(string: GharAPI.baseURLString + word.audioUrl) else { return }
+        player?.pause()
+        player = AVPlayer(url: url)
+        player?.play()
+    }
+
+    private func handleSolve(_ word: Word, _ missed: Bool) {
+        // Anti-mash (Som's call 2026-10-19): clean first-try +5,
+        // any miss on this card drops the solve to +2.
+        totalXP += missed ? 2 : 5
+        solvedCount += 1
+        DailyQuiz.recordSolve()
+        // Non-teen: ding and move on — no praise cheer per solve
+        // (Som, 2026-10-23). Teen decks keep Prakash's cheers.
+        if isTeen { WinFanfare.play(teen: true) } else { QuizDing.play() }
+        celebrate()
+        lastWin = "Quiz: \(word.english)"
+        if DailyQuiz.checkBlitzComplete() {
+            totalXP += DailyChallenge.today().xp
+            lastWin = "Quiz Blitz complete! +15 XP"
+        }
+        if blitzMode && solvedCount >= 5 {
+            blitzDone = true
+        }
+    }
+
+    private func celebrate() {
+        showConfetti = false
+        DispatchQueue.main.async { showConfetti = true }
+    }
+}
+
+/// One full-screen quiz card: big speaker button to hear the word,
+/// tap the answer. Wrong taps fade; the right one goes green.
+/// After solving, a big Next button (or swipe up) moves on.
+/// Each card owns its state — the feed just counts solves.
+struct QuizFeedCard: View {
+    let data: QuizFeedView.QuizCardData
+    let onPlay: (Word) -> Void
+    /// missed: true when the kid tapped a wrong option on this card
+    /// before solving — the parent pays +2 instead of +5 (anti-mash).
+    let onSolve: (Word, Bool) -> Void
+    var isTeen = false
+    @State private var solved = false
+    @State private var wrongIDs: Set<String> = []
+
+    var body: some View {
+        VStack(spacing: 18) {
+            Spacer()
+            Text("What did you hear?")
+                .font(.title2).bold()
+            Button(action: { onPlay(data.word) }) {
+                Label("Hear the word", systemImage: "speaker.wave.2.fill")
+                    .font(.title2)
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
+            // Visible stakes (Som's ask 2026-10-19): the kid SEES the
+            // value drop the moment a miss lands — +5 clean, +2 after.
+            Text(wrongIDs.isEmpty ? "⭐ +5 XP" : "😅 +2 XP now")
+                .font(.headline)
+                .foregroundStyle(wrongIDs.isEmpty ? .green : .orange)
+            ForEach(data.options) { option in
+                Button(action: { answer(option) }) {
+                    if let hex = option.colorHex {
+                        RoundedRectangle(cornerRadius: 14)
+                            .fill(Color(hex: hex))
+                            .frame(height: 76)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 14)
+                                    .strokeBorder(swatchBorder(for: option), lineWidth: 4)
+                            )
+                            .opacity(wrongIDs.contains(option.id) ? 0.35 : 1.0)
+                    } else {
+                        HStack(spacing: 12) {
+                            if let imagePath = option.image, imagePath.hasPrefix("/") {
+                                AsyncImage(url: URL(string: GharAPI.baseURLString + imagePath)) { phase in
+                                    switch phase {
+                                    case .success(let image):
+                                        image.resizable().scaledToFill()
+                                    case .failure, .empty:
+                                        Color.clear
+                                    @unknown default:
+                                        Color.clear
+                                    }
+                                }
+                                .frame(width: 56, height: 56)
+                                .clipShape(RoundedRectangle(cornerRadius: 10))
+                            }
+                            Text(option.english)
+                                .font(.headline)
+                            Spacer()
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(10)
+                        .background(background(for: option))
+                        .foregroundStyle(.primary)
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                    }
+                }
+                .disabled(solved)
+            }
+            if solved {
+                VStack(spacing: 2) {
+                    Text("Swipe")
+                        .font(.title2)
+                        .bold()
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 44))
+                }
+                .foregroundStyle(.secondary)
+            }
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding()
+    }
+
+    private func answer(_ option: Word) {
+        guard !solved else { return }
+        if option.id == data.word.id {
+            solved = true
+            QuizStats.recordCorrect()
+            onSolve(data.word, !wrongIDs.isEmpty)
+        } else {
+            wrongIDs.insert(option.id)
+            WrongAnswerFeedback.play(teen: isTeen)
+            QuizStats.recordWrong()
+        }
+    }
+
+    private func background(for option: Word) -> Color {
+        if solved, option.id == data.word.id { return .green.opacity(0.25) }
+        if wrongIDs.contains(option.id) { return .red.opacity(0.25) }
+        return .gray.opacity(0.15)
+    }
+
+    private func swatchBorder(for option: Word) -> Color {
+        if solved, option.id == data.word.id { return .green }
+        return .primary.opacity(0.12)
+    }
+}
+
+/// Lyrics quiz: "What does this song title mean?" — rebuilt 2026-10-19
+/// because the lyric `english` fields are full paragraphs (walls of
+/// text on quiz buttons). Options use the short `quizShort` gloss
+/// instead, so each answer is 2-4 words. The card shows the title
+/// big and the kid taps the meaning — and since 2026-10-23 the card
+/// also SPEAKS THE TITLE on tap: a short Prakash clip (quiz_<id>)
+/// recorded for the quiz. NOT the lessons' sung line — that clip
+/// is the whole lyric, far too long for a quiz prompt (Som's call).
+/// Solve feedback is the plain ding: no praise clip competes with
+/// the question. Same +5 XP rules as the other quizzes.
+struct LyricsQuizView: View {
+    let words: [Word]
+    @AppStorage("ghar.xp.total") private var totalXP = 0
+    @AppStorage("ghar.last.win") private var lastWin = ""
+    @AppStorage("ghar.premium.unlocked") private var isUnlocked = false
+    @AppStorage("ghar.quiz.freeUsed") private var freeUsed = 0
+    @State private var showingPaywall = false
+    @State private var cards: [LyricsCardData] = []
+    @State private var page = 0
+    @State private var player: AVPlayer?
+
+    /// Speak the settled card's TITLE (short Prakash clip) — the
+    /// quiz plays it on its own; the card's button is only a replay.
+    /// Pause-first, so titles never overlap.
+    private func playTitle(_ word: Word) {
+        guard let url = URL(string: GharAPI.baseURLString + "/audio/nepal-v1/quiz_\(word.id)_np.m4a") else { return }
+        player?.pause()
+        player = AVPlayer(url: url)
+        player?.play()
+    }
+
+    struct LyricsCardData: Identifiable {
+        // Fresh UUID per deal (not the word id): reshuffles get new
+        // identities so the pager never jumps to a stale position.
+        let id = UUID()
+        let word: Word
+        let options: [Word]
+    }
+
+    private var playable: [Word] {
+        words.filter { ($0.quizShort ?? "").isEmpty == false }
+    }
+
+    var body: some View {
+        if !isUnlocked && freeUsed >= 5 {
+            // Free tier lock: 5 questions total, then the paywall.
+            VStack(spacing: 16) {
+                Text("\u{1F512}").font(.system(size: 56))
+                Text("You've used your 5 free questions!")
+                    .font(.title2).bold()
+                    .multilineTextAlignment(.center)
+                Text("Unlock unlimited quizzes with Ghar Premium.")
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                Button("See Premium") { showingPaywall = true }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+            }
+            .padding()
+            .sheet(isPresented: $showingPaywall) { PaywallView() }
+        } else if cards.isEmpty {
+            // First frame, cards not dealt yet: a neutral loading
+            // beat. Without this gate the pager opens on its only
+            // page — the "Set complete!" end card — for a visible
+            // flash before deal() lands: the first-question glitch.
+            VStack(spacing: 12) {
+                ProgressView()
+                Text("Shuffling questions…")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .onAppear { deal() }
+        } else {
+            StrictVerticalPager(pageCount: cards.count + 1, page: $page) { i in
+                if i < cards.count {
+                    LyricsQuizCard(data: cards[i], onPlayTitle: playTitle, onSolve: handleSolve)
+                        .id(cards[i].id)
+                } else {
+                    // End of the set: reshuffle and keep going.
+                    VStack(spacing: 16) {
+                        Text("\u{1F389}").font(.system(size: 64))
+                        Text("Set complete!")
+                            .font(.title2).bold()
+                        Button("Shuffle & keep going") { deal() }
+                            .buttonStyle(.borderedProminent)
+                            .controlSize(.large)
+                    }
+                }
+            }
+            // Auto-play the title of the card that settles on screen —
+            // never a preloaded neighbor. Swiping away stops it first.
+            .onChange(of: page) { _, newPage in
+                player?.pause()
+                if newPage < cards.count {
+                    playTitle(cards[newPage].word)
+                }
+            }
+        }
+    }
+
+    /// Deal a shuffled set of question cards. Free tier is capped so the
+    /// lifetime 5-question limit holds.
+    private func deal() {
+        let playable = self.playable
+        var count = playable.count
+        if !isUnlocked {
+            count = min(count, max(0, 5 - freeUsed))
+            freeUsed += count
+        }
+        cards = playable.shuffled().prefix(count).map { word in
+            let distractors = playable.filter { $0.id != word.id }.shuffled().prefix(3)
+            return LyricsCardData(word: word,
+                                  options: ([word] + distractors).shuffled())
+        }
+        // Back to the first card of the fresh set. Already on page 0
+        // the page-change hook won't fire, so play its title directly;
+        // from any other page the hook plays it when we land.
+        if page == 0 {
+            if let first = cards.first {
+                // Same settle beat as the listening feed: don't start
+                // the title under the navigation animation.
+                let dealtID = first.word.id
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                    if page == 0, cards.first?.word.id == dealtID {
+                        playTitle(first.word)
+                    }
+                }
+            }
+        } else {
+            page = 0
+        }
+    }
+
+    private func handleSolve(_ word: Word, _ missed: Bool) {
+        // Anti-mash (Som's call 2026-10-19): clean first-try +5,
+        // any miss on this card drops the solve to +2.
+        totalXP += missed ? 2 : 5
+        DailyQuiz.recordSolve()
+        QuizStats.recordCorrect()
+        // Ding, not Prakash praise: a cheer after every answer
+        // would compete with the next question (Som's call,
+        // 2026-10-23).
+        QuizDing.play()
+        lastWin = "Lyrics Quiz: \(word.romanized)"
+    }
+}
+
+/// One full-screen lyrics quiz card: big song title, tap the meaning.
+/// Wrong taps fade red and the kid retries — friendlier for learning
+/// than one-strike. The +5 lands exactly once per card.
+struct LyricsQuizCard: View {
+    let data: LyricsQuizView.LyricsCardData
+    /// missed: true when the kid tapped a wrong option on this card
+    /// before solving — the parent pays +2 instead of +5 (anti-mash).
+    /// Replay the title (the parent auto-plays it on settle).
+    let onPlayTitle: (Word) -> Void
+    let onSolve: (Word, Bool) -> Void
+    @State private var solved = false
+    @State private var wrongIDs: Set<String> = []
+
+    var body: some View {
+        VStack(spacing: 18) {
+            Spacer()
+            Text("What does this title mean?")
+                .font(.title2).bold()
+                .multilineTextAlignment(.center)
+            Text(data.word.devanagari)
+                .font(.system(size: 44)).bold()
+                .multilineTextAlignment(.center)
+            Text(data.word.romanized)
+                .font(.title3)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+            Button { onPlayTitle(data.word) } label: {
+                Label("Hear the title", systemImage: "speaker.wave.2.fill")
+                    .font(.headline)
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
+            // Visible stakes (Som's ask 2026-10-19): the kid SEES the
+            // value drop the moment a miss lands — +5 clean, +2 after.
+            Text(wrongIDs.isEmpty ? "⭐ +5 XP" : "😅 +2 XP now")
+                .font(.headline)
+                .foregroundStyle(wrongIDs.isEmpty ? .green : .orange)
+            ForEach(data.options) { option in
+                Button(action: { answer(option) }) {
+                    HStack(spacing: 12) {
+                        Text(option.quizShort ?? "")
+                            .font(.headline)
+                        Spacer()
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(10)
+                    .background(background(for: option))
+                    .foregroundStyle(.primary)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                }
+                .disabled(solved)
+            }
+            if solved {
+                VStack(spacing: 2) {
+                    Text("Swipe")
+                        .font(.title2).bold()
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 44))
+                }
+                .foregroundStyle(.secondary)
+            }
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding()
+    }
+
+    private func answer(_ option: Word) {
+        guard !solved else { return }
+        if option.id == data.word.id {
+            solved = true
+            onSolve(data.word, !wrongIDs.isEmpty)
+        } else {
+            wrongIDs.insert(option.id)
+            WrongAnswerFeedback.play(teen: true)
+            QuizStats.recordWrong()
+        }
+    }
+
+    private func background(for option: Word) -> Color {
+        if solved, option.id == data.word.id { return .green.opacity(0.25) }
+        if wrongIDs.contains(option.id) { return .red.opacity(0.25) }
+        return .gray.opacity(0.15)
+    }
+}
+
 ///   `options`, whether it's `solved`, and which taps were `wrongIDs`.
 ///   Everything on screen is derived from those four — no hidden state.
 /// - `onAppear` and the "Next word" button both call `newQuestion()`.
@@ -2910,9 +5960,18 @@ struct QuizMenuView: View {
 ///   branch where the right answer is tapped.
 struct QuizView: View {
     let words: [Word]
+    /// Quiz Blitz mode: a 5-question sprint with a finish screen.
+    /// Normal quiz is endless; blitz ends after 5 solves.
+    var blitzMode = false
+    @State private var blitzSolves = 0
+    @State private var blitzDone = false
+    @Environment(\.dismiss) private var dismiss
     @State private var player: AVPlayer?
     @AppStorage("ghar.xp.total") private var totalXP = 0
     @AppStorage("ghar.last.win") private var lastWin = ""
+    @AppStorage("ghar.premium.unlocked") private var isUnlocked = false
+    @AppStorage("ghar.quiz.freeUsed") private var freeUsed = 0
+    @State private var showingPaywall = false
 
     @State private var current: Word?
     @State private var options: [Word] = []
@@ -2924,6 +5983,37 @@ struct QuizView: View {
     @State private var queue: [Word] = []
 
     var body: some View {
+        // Free tier: 5 quiz questions total. After that, the quiz locks.
+        if !isUnlocked && freeUsed >= 5 {
+            VStack(spacing: 16) {
+                Text("🔒").font(.system(size: 56))
+                Text("You've used your 5 free questions!")
+                    .font(.title2).bold()
+                    .multilineTextAlignment(.center)
+                Text("Unlock unlimited quizzes with Ghar Premium.")
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                Button("See Premium") { showingPaywall = true }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+            }
+            .padding()
+            .sheet(isPresented: $showingPaywall) { PaywallView() }
+        } else if blitzMode && blitzDone {
+            // Quiz Blitz finish: 5 solves, done. No endless questions.
+            VStack(spacing: 16) {
+                Text("\u{1F389}").font(.system(size: 64))
+                Text("Quiz Blitz complete!")
+                    .font(.title2).bold()
+                Text("5 questions down. See you tomorrow.")
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                Button("Done") { dismiss() }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+            }
+            .padding()
+        } else {
         VStack(spacing: 20) {
             Text("What did you hear?")
                 .font(.title2)
@@ -2935,6 +6025,11 @@ struct QuizView: View {
             }
             .buttonStyle(.borderedProminent)
             .disabled(current == nil)
+            // Visible stakes (Som's ask 2026-10-19): the kid SEES the
+            // value drop the moment a miss lands — +5 clean, +2 after.
+            Text(wrongIDs.isEmpty ? "⭐ +5 XP" : "😅 +2 XP now")
+                .font(.headline)
+                .foregroundStyle(wrongIDs.isEmpty ? .green : .orange)
 
             ForEach(options) { option in
                 Button(action: { answer(option) }) {
@@ -3001,12 +6096,18 @@ struct QuizView: View {
                     }
             }
         }
+        } // closes the free-tier else
     }
 
     /// Fresh question: dealt from a shuffled queue, so every word is asked
     /// once before anything repeats. Plus up to 3 random distractors, all
     /// shuffled. Auto-plays the word.
     private func newQuestion() {
+        // Free tier: 5 questions total. Count each new question.
+        if !isUnlocked {
+            guard freeUsed < 5 else { return }
+            freeUsed += 1
+        }
         // Only words with recorded audio can be quiz questions —
         // a listening game with nothing to hear isn't a game.
         // `?? true`: packs from before `has_audio` existed count as audible.
@@ -3030,6 +6131,7 @@ struct QuizView: View {
     private func playWord() {
         guard let current,
               let url = URL(string: GharAPI.baseURLString + current.audioUrl) else { return }
+        player?.pause()
         player = AVPlayer(url: url)
         player?.play()
     }
@@ -3037,13 +6139,38 @@ struct QuizView: View {
     private func answer(_ option: Word) {
         if option.id == current?.id {
             solved = true
-            totalXP += 5
-            // The win moment: voice cheer + confetti.
-            WinFanfare.play()
+            // Anti-mash (Som's call 2026-10-19): clean first-try +5,
+            // any miss on this question drops the solve to +2.
+            totalXP += wrongIDs.isEmpty ? 5 : 2
+            QuizStats.recordCorrect()
+            // The win moment: ding + confetti (no praise cheer —
+            // Som, 2026-10-23).
+            QuizDing.play()
             celebrate()
             lastWin = "Quiz: \(option.english)"
+            // Daily challenge: 5 solves finishes a Quiz Blitz day.
+            DailyQuiz.recordSolve()
+            if blitzMode {
+                blitzSolves += 1
+                if blitzSolves >= 5 && !blitzDone {
+                    blitzDone = true
+                    if DailyQuiz.checkBlitzComplete() {
+                        totalXP += DailyChallenge.today().xp
+                        lastWin = "Quiz Blitz complete! +15 XP"
+                    } else {
+                        lastWin = "Quiz Blitz complete!"
+                    }
+                    WinFanfare.play()
+                }
+            } else if DailyQuiz.checkBlitzComplete() {
+                totalXP += DailyChallenge.today().xp
+                WinFanfare.play()
+                lastWin = "Quiz Blitz complete! +15 XP"
+            }
         } else {
             wrongIDs.insert(option.id)
+            WrongAnswerFeedback.play()
+            QuizStats.recordWrong()
         }
     }
 
@@ -3087,6 +6214,9 @@ struct PictureQuizView: View {
     let words: [Word]
     @AppStorage("ghar.xp.total") private var totalXP = 0
     @AppStorage("ghar.last.win") private var lastWin = ""
+    @AppStorage("ghar.premium.unlocked") private var isUnlocked = false
+    @AppStorage("ghar.quiz.freeUsed") private var freeUsed = 0
+    @State private var showingPaywall = false
 
     @State private var current: Word?
     @State private var options: [Word] = []
@@ -3101,6 +6231,23 @@ struct PictureQuizView: View {
     @State private var showConfetti = false
 
     var body: some View {
+        // Free tier: 5 quiz questions total (shared with QuizView).
+        if !isUnlocked && freeUsed >= 5 {
+            VStack(spacing: 16) {
+                Text("\u{1F512}").font(.system(size: 56))
+                Text("You've used your 5 free questions!")
+                    .font(.title2).bold()
+                    .multilineTextAlignment(.center)
+                Text("Unlock unlimited quizzes with Ghar Premium.")
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                Button("See Premium") { showingPaywall = true }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+            }
+            .padding()
+            .sheet(isPresented: $showingPaywall) { PaywallView() }
+        } else {
         // ScrollView: the picture + hint + 4 answers + Next button is taller
         // than the screen, so without this the Next button gets pushed
         // off the bottom and can never be reached.
@@ -3109,6 +6256,11 @@ struct PictureQuizView: View {
                 Text("What is this?")
                     .font(.title2)
                     .bold()
+                // Visible stakes (Som's ask 2026-10-19): the kid SEES
+                // the value drop the moment a miss lands — +5 clean, +2 after.
+                Text(wrongIDs.isEmpty ? "⭐ +5 XP" : "😅 +2 XP now")
+                    .font(.subheadline)
+                    .foregroundStyle(wrongIDs.isEmpty ? .green : .orange)
 
                 if let current {
                     if let imagePath = current.image {
@@ -3185,12 +6337,18 @@ struct PictureQuizView: View {
                     }
             }
         }
+        } // closes the free-tier else
     }
 
     /// Fresh question: dealt from the shuffled queue, so every picture is
     /// asked once before anything repeats. Refills (minus the just-asked
     /// word, so the boundary never repeats either) when the queue runs out.
     private func newQuestion() {
+        // Free tier: 5 questions total (shared with QuizView).
+        if !isUnlocked {
+            guard freeUsed < 5 else { return }
+            freeUsed += 1
+        }
         let pictured = words.filter { $0.image != nil || $0.colorHex != nil }
         if queue.isEmpty {
             queue = pictured.filter { $0.id != current?.id }.shuffled()
@@ -3211,11 +6369,23 @@ struct PictureQuizView: View {
         speak(option)
         if option.id == current?.id {
             solved = true
-            totalXP += 5
+            // Anti-mash (Som's call 2026-10-19): clean first-try +5,
+            // any miss on this question drops the solve to +2.
+            totalXP += wrongIDs.isEmpty ? 5 : 2
+            QuizStats.recordCorrect()
             celebrate()
             lastWin = "Picture quiz: \(option.english)"
+            // Daily challenge: 5 solves finishes a Quiz Blitz day.
+            DailyQuiz.recordSolve()
+            if DailyQuiz.checkBlitzComplete() {
+                totalXP += DailyChallenge.today().xp
+                WinFanfare.play()
+                lastWin = "Quiz Blitz complete! +15 XP"
+            }
         } else {
             wrongIDs.insert(option.id)
+            WrongAnswerFeedback.play()
+            QuizStats.recordWrong()
         }
     }
 
@@ -3226,6 +6396,7 @@ struct PictureQuizView: View {
     private func speak(_ word: Word) {
         if word.hasAudio == true,
            let url = URL(string: GharAPI.baseURLString + word.audioUrl) {
+            player?.pause()
             player = AVPlayer(url: url)
             player?.play()
         } else {
@@ -3240,6 +6411,262 @@ struct PictureQuizView: View {
 
     private func background(for option: Word) -> Color {
         if solved, option.id == current?.id { return .green.opacity(0.25) }
+        if wrongIDs.contains(option.id) { return .red.opacity(0.25) }
+        return .gray.opacity(0.15)
+    }
+}
+
+/// TikTok-style PICTURE quiz feed: one picture per full-screen card, swipe
+/// for the next. Same settled-card tracking as the listening feed, but NO
+/// auto-play here — hearing the word would give away the answer. Instead,
+/// tapping an answer speaks THAT word (family recording when it exists,
+/// otherwise the phone's voice), so audio always matches the tapped card.
+/// Dashain/Tihar rule kept: no praise cheers, only the tapped word talks.
+struct PictureQuizFeedView: View {
+    let words: [Word]
+    @AppStorage("ghar.xp.total") private var totalXP = 0
+    @AppStorage("ghar.last.win") private var lastWin = ""
+    @AppStorage("ghar.premium.unlocked") private var isUnlocked = false
+    @AppStorage("ghar.quiz.freeUsed") private var freeUsed = 0
+    @State private var showingPaywall = false
+    @State private var player: AVPlayer?
+    @State private var cards: [PictureCardData] = []
+    @State private var page = 0
+    @State private var showConfetti = false
+
+    struct PictureCardData: Identifiable {
+        let id = UUID()
+        let word: Word
+        let options: [Word]
+    }
+
+    var body: some View {
+        // Free tier: 5 quiz questions total (shared with the listening quiz).
+        if !isUnlocked && freeUsed >= 5 {
+            VStack(spacing: 16) {
+                Text("\u{1F512}").font(.system(size: 56))
+                Text("You've used your 5 free questions!")
+                    .font(.title2).bold()
+                    .multilineTextAlignment(.center)
+                Text("Unlock unlimited quizzes with Ghar Premium.")
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                Button("See Premium") { showingPaywall = true }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+            }
+            .padding()
+            .sheet(isPresented: $showingPaywall) { PaywallView() }
+        } else if cards.isEmpty {
+            // First frame, cards not dealt yet: a neutral loading
+            // beat. Without this gate the pager opens on its only
+            // page — the "Set complete!" end card — for a visible
+            // flash before deal() lands: the first-question glitch.
+            VStack(spacing: 12) {
+                ProgressView()
+                Text("Shuffling questions…")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .onAppear { deal() }
+        } else {
+            StrictVerticalPager(pageCount: cards.count + 1, page: $page) { i in
+                if i < cards.count {
+                    PictureQuizFeedCard(data: cards[i], onSpeak: speak,
+                                        onSolve: handleSolve)
+                        .id(cards[i].id)
+                } else {
+                    // End of the set: reshuffle and keep going.
+                    VStack(spacing: 16) {
+                        Text("\u{1F389}").font(.system(size: 64))
+                        Text("Set complete!")
+                            .font(.title2).bold()
+                        Button("Shuffle & keep going") { deal() }
+                            .buttonStyle(.borderedProminent)
+                            .controlSize(.large)
+                    }
+                }
+            }
+            // A tapped word keeps talking if you swipe mid-word — stop it.
+            .onChange(of: page) { _, _ in player?.pause() }
+            .overlay {
+                if showConfetti {
+                    ConfettiBurst()
+                        .allowsHitTesting(false)
+                        .task {
+                            try? await Task.sleep(nanoseconds: 1_200_000_000)
+                            showConfetti = false
+                        }
+                }
+            }
+        }
+    }
+
+    /// Deal a shuffled set of picture cards. Free tier is capped so the
+    /// lifetime 5-question limit holds (shared with the listening quiz).
+    private func deal() {
+        let pictured = words.filter { $0.image != nil || $0.colorHex != nil }
+        var count = pictured.count
+        if !isUnlocked {
+            count = min(count, max(0, 5 - freeUsed))
+            freeUsed += count
+        }
+        cards = pictured.shuffled().prefix(count).map { word in
+            let distractors = pictured.filter { $0.id != word.id }.shuffled().prefix(3)
+            return PictureCardData(word: word,
+                                  options: ([word] + distractors).shuffled())
+        }
+        // Back to the first card of the fresh set.
+        page = 0
+    }
+
+    /// Says the TAPPED word out loud: the family recording when it exists,
+    /// otherwise the phone's own voice — so answers talk from day one.
+    /// Pause first: two cards' audio can never overlap.
+    private func speak(_ word: Word) {
+        player?.pause()
+        if word.hasAudio == true,
+           let url = URL(string: GharAPI.baseURLString + word.audioUrl) {
+            player?.pause()
+            player = AVPlayer(url: url)
+            player?.play()
+        } else {
+            NepaliSpeaker.say(nepali: word.devanagari, romanized: word.romanized)
+        }
+    }
+
+    /// Correct tap: +5 XP, counts toward the daily Quiz Blitz. No praise
+    /// cheers on Dashain/Tihar — only the tapped word talks (the fanfare
+    /// below fires on the blitz milestone, not per question).
+    private func handleSolve(_ word: Word, _ missed: Bool) {
+        // Anti-mash (Som's call 2026-10-19): clean first-try +5,
+        // any miss on this card drops the solve to +2.
+        totalXP += missed ? 2 : 5
+        DailyQuiz.recordSolve()
+        celebrate()
+        lastWin = "Picture quiz: \(word.english)"
+        if DailyQuiz.checkBlitzComplete() {
+            totalXP += DailyChallenge.today().xp
+            WinFanfare.play()
+            lastWin = "Quiz Blitz complete! +15 XP"
+        }
+    }
+
+    private func celebrate() {
+        showConfetti = false
+        DispatchQueue.main.async { showConfetti = true }
+    }
+}
+
+/// One full-screen picture card: "What is this?", the illustration, an
+/// optional hint, and 4 answers. Tapping an answer speaks it; wrong taps
+/// go red, the right one goes green. After solving, a big Swipe hint —
+/// swipe for the next picture.
+/// Each card owns its state — the feed just counts solves.
+struct PictureQuizFeedCard: View {
+    let data: PictureQuizFeedView.PictureCardData
+    let onSpeak: (Word) -> Void
+    /// missed: true when the kid tapped a wrong option on this card
+    /// before solving — the parent pays +2 instead of +5 (anti-mash).
+    let onSolve: (Word, Bool) -> Void
+    @State private var solved = false
+    @State private var wrongIDs: Set<String> = []
+
+    var body: some View {
+        VStack(spacing: 12) {
+            Spacer()
+            Text("What is this?")
+                .font(.title2)
+                .bold()
+            // Visible stakes (Som's ask 2026-10-19): the kid SEES the
+            // value drop the moment a miss lands — +5 clean, +2 after.
+            Text(wrongIDs.isEmpty ? "⭐ +5 XP" : "😅 +2 XP now")
+                .font(.subheadline)
+                .foregroundStyle(wrongIDs.isEmpty ? .green : .orange)
+            if let imagePath = data.word.image {
+                AsyncImage(url: URL(string: GharAPI.baseURLString + imagePath)) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image.resizable().scaledToFit()
+                    case .failure, .empty:
+                        ProgressView()
+                    @unknown default:
+                        ProgressView()
+                    }
+                }
+                .frame(height: 200)
+                .clipShape(RoundedRectangle(cornerRadius: 16))
+                .shadow(radius: 4)
+            } else if let hex = data.word.colorHex {
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(Color(hex: hex))
+                    .frame(height: 200)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16)
+                            .stroke(Color.primary.opacity(0.12), lineWidth: 1)
+                    )
+                    .shadow(radius: 4)
+            }
+            // A distinguishing hint for similar-looking pictures (Dashain).
+            // Words without one just skip this — no empty space.
+            if let hint = data.word.quizHint {
+                Text(hint)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal)
+            }
+            ForEach(data.options) { option in
+                Button(action: { answer(option) }) {
+                    VStack(spacing: 2) {
+                        Text(option.english)
+                            .font(.headline)
+                        Text(option.devanagari)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(10)
+                    .background(background(for: option))
+                    .foregroundStyle(.primary)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                }
+                .disabled(solved)
+            }
+            if solved {
+                VStack(spacing: 2) {
+                    Text("Swipe")
+                        .font(.title2)
+                        .bold()
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 44))
+                }
+                .foregroundStyle(.secondary)
+            }
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding()
+    }
+
+    private func answer(_ option: Word) {
+        guard !solved else { return }
+        // Say the tapped word — right or wrong, the card always talks.
+        onSpeak(option)
+        if option.id == data.word.id {
+            solved = true
+            QuizStats.recordCorrect()
+            onSolve(option, !wrongIDs.isEmpty)
+        } else {
+            wrongIDs.insert(option.id)
+            WrongAnswerFeedback.play()
+            QuizStats.recordWrong()
+        }
+    }
+
+    private func background(for option: Word) -> Color {
+        if solved, option.id == data.word.id { return .green.opacity(0.25) }
         if wrongIDs.contains(option.id) { return .red.opacity(0.25) }
         return .gray.opacity(0.15)
     }
@@ -3331,6 +6758,104 @@ struct ConfettiBurst: View {
 ///   mid-sentence — same keep-alive lesson as the AVPlayer in @State.
 /// - `UINotificationFeedbackGenerator` = the iPhone success buzz. One
 ///   line, and it's the Apple-approved way to say "you did it!"
+/// The real recorded dog bark, playable from anywhere.
+/// (The unlock celebration lives in ContentView; the tap handler in MyGharView.)
+enum DogBark {
+    private static var player: AVPlayer?
+
+    static func play() {
+        guard let url = URL(string: GharAPI.baseURLString + "/audio/nepal-v1/dog_bark.m4a") else { return }
+        player?.pause()
+        player = AVPlayer(url: url)
+        player?.play()
+    }
+}
+
+/// Quiz milestone stickers: lifetime correct answers (tracked by
+/// QuizStats for the leaderboard) earn trophy-shelf stickers at
+/// 50 / 100 / 250 / 500. Granted once, straight into the shared owned
+/// set — the same storage the streak prizes use.
+enum QuizStickers {
+    static let thresholds: [String: Int] = ["quiz50": 50, "quiz100": 100, "quiz250": 250, "quiz500": 500]
+
+    /// Grants any newly-earned stickers. Returns true when one landed.
+    @discardableResult
+    static func check() -> Bool {
+        let total = QuizStats.correctTotal
+        var ids = (try? JSONDecoder().decode(Set<String>.self, from: UserDefaults.standard.data(forKey: "ghar.shop.owned") ?? Data())) ?? Set<String>()
+        var changed = false
+        for (id, need) in thresholds where total >= need && !ids.contains(id) {
+            ids.insert(id)
+            changed = true
+        }
+        if changed {
+            UserDefaults.standard.set((try? JSONEncoder().encode(ids)) ?? Data(), forKey: "ghar.shop.owned")
+        }
+        return changed
+    }
+}
+
+/// The correct-answer DING for the non-teen quizzes (Som's call
+/// 2026-10-23): no spoken praise cheer on every solve — just the
+/// ding (plus the success haptic WinFanfare used to give) and move
+/// on. Teen quizzes keep their recorded praise clips, and
+/// wrong-answer feedback is untouched. Synthesized — no audio file
+/// needed, and it plays even with the silent switch on (uses the
+/// playback audio session). Same bell as the Sentences/Builder one.
+/// (Named QuizDing here: SentencesView and SentenceBuilderView each
+/// keep a file-private CorrectDing, and Swift forbids the clash.)
+enum QuizDing {
+    private static var engine: AVAudioEngine?
+
+    static func play() {
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
+        // Audio session setup off the main thread (setActive on main
+        // triggers a purple runtime warning about UI unresponsiveness).
+        DispatchQueue.global(qos: .userInitiated).async {
+            do {
+                try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default)
+                try AVAudioSession.sharedInstance().setActive(true)
+            } catch { /* still try to play */ }
+            Self.playEngineSound()
+        }
+    }
+
+    private static func playEngineSound() {
+        let engine = AVAudioEngine()
+        self.engine = engine // retain while playing
+
+        let sampleRate = 44_100.0
+        let duration = 0.6
+        let freq = 880.0 // A5 — bright, pleasant bell tone
+
+        guard let format = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 1) else { return }
+        let frameCount = AVAudioFrameCount(sampleRate * duration)
+        guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount) else { return }
+        buffer.frameLength = frameCount
+
+        let data = buffer.floatChannelData![0]
+        for i in 0 ..< Int(frameCount) {
+            let t = Double(i) / sampleRate
+            let envelope = exp(-t * 6.0) // natural bell decay
+            let tone = sin(2 * .pi * freq * t) * 0.6
+                     + sin(2 * .pi * freq * 2 * t) * 0.2 // soft octave harmonic
+            data[i] = Float(tone * envelope * 0.5)
+        }
+
+        let player = AVAudioPlayerNode()
+        engine.attach(player)
+        engine.connect(player, to: engine.mainMixerNode, format: format)
+        do { try engine.start() } catch { return }
+        player.scheduleBuffer(buffer) {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                engine.stop()
+                QuizDing.engine = nil
+            }
+        }
+        player.play()
+    }
+}
+
 enum WinFanfare {
     /// One synthesizer for the whole app, kept alive forever.
     private static let synth = AVSpeechSynthesizer()
@@ -3338,16 +6863,35 @@ enum WinFanfare {
     private static var player: AVPlayer?
     /// Som's recorded Nepali praise, set when the pack loads.
     static var praise: [Word] = []
+    /// Prakash's recorded praise for teen quizzes.
+    private static let teenPraiseClips = [
+        "feedback_teen_correct_1_np.m4a",  // "सही!"
+        "feedback_teen_correct_2_np.m4a",  // "राम्रो!"
+        "feedback_teen_correct_3_np.m4a",  // "खत्रा!"
+    ]
 
-    static func play() {
+    static func play(teen: Bool = false) {
         // Haptic + voice both run from the button tap on the main thread.
         UINotificationFeedbackGenerator().notificationOccurred(.success)
+
+        // Teen mode: Prakash's voice wins.
+        if teen {
+            let file = teenPraiseClips.randomElement()!
+            if let url = URL(string: GharAPI.baseURLString + "/audio/nepal-v1/" + file) {
+                synth.stopSpeaking(at: .immediate)
+                player?.pause()
+                player = AVPlayer(url: url)
+                player?.play()
+                return
+            }
+        }
 
         // His voice wins: one random recorded praise word.
         let recorded = praise.filter { $0.hasAudio == true }
         if let cheer = recorded.randomElement(),
            let url = URL(string: GharAPI.baseURLString + cheer.audioUrl) {
             synth.stopSpeaking(at: .immediate)
+            player?.pause()
             player = AVPlayer(url: url)
             player?.play()
             return
@@ -3404,6 +6948,271 @@ enum WinFanfare {
 ///   via the English voice — zero audio files to record either way.
 /// - The "poke" pattern from before is still here — now each tap both
 ///   speaks the Nepali name AND pops the decoration.
+/// Keep Suga's name kid-safe: the naming sheet rejects any name containing
+/// one of these (matched case-insensitively, whole words only — so "hello"
+/// stays legal). Digits and emoji can't be typed in the first place.
+fileprivate let BuddyBannedWords: Set<String> = [
+    "fuck", "fucking", "shit", "bitch", "ass", "asshole", "dick", "cock",
+    "pussy", "whore", "slut", "bastard", "damn", "dammit", "goddamn",
+    "crap", "piss", "douche", "retard", "fag", "nigga",
+]
+/// Mystery box prizes: NOT for sale at any price. Earned only from the
+/// lucky gift box after finishing a trace deck — one random unowned item
+/// per box. Global so the gift box (TraceView.swift) can grant them.
+let mysteryBoxPrizes: [ShopItem] = [
+    ShopItem(id: "guleyli", nameEn: "Slingshot", nameNe: "गुलेली", romanized: "guleyli", icon: "🏹", cost: 0),
+    ShopItem(id: "nanglo", nameEn: "Woven tray", nameNe: "नाङ्लो", romanized: "nanglo", icon: "🧺", cost: 0),
+    ShopItem(id: "charkha", nameEn: "Spinning wheel", nameNe: "चर्खा", romanized: "charkha", icon: "☸️", cost: 0),
+    ShopItem(id: "khukuri", nameEn: "Khukuri knife", nameNe: "खुकुरी", romanized: "khukuri", icon: "🗡️", cost: 0),
+    ShopItem(id: "sarangi", nameEn: "Sarangi fiddle", nameNe: "सारंगी", romanized: "sarangi", icon: "🎻", cost: 0),
+    ShopItem(id: "karuwa", nameEn: "Water pitcher", nameNe: "करुवा", romanized: "karuwa", icon: "🏺", cost: 0),
+]
+
+
+/// Teen mission rewards: NOT for sale. The soccer ball is the teen
+/// parallel to Bhunte — finish all 8 teen missions to earn it. The
+/// mystery prizes are a one-time random draw at 4 teen missions.
+let teenBallItem = ShopItem(id: "goldsoccerball", nameEn: "Golden Soccer Ball", nameNe: "सुनको फुटबल", romanized: "sunko phutbal", icon: "⚽", cost: 0)
+
+/// One prize per teen LESSON deck (Som's call, 2026-10-23): finish
+/// the deck — hear every phrase — and its prize lands in My Ghar.
+/// Granted inside DeckProgress.evaluate, the deck-completion path.
+let teenDeckPrizes: [(deck: String, item: ShopItem)] = [
+    (deck: "texting", item: ShopItem(id: "headphones", nameEn: "Headphones", nameNe: "हेडफोन", romanized: "hedfon", icon: "🎧", cost: 0)),
+    (deck: "slang", item: ShopItem(id: "skateboard", nameEn: "Skateboard", nameNe: "स्केटबोर्ड", romanized: "skateboard", icon: "🛹", cost: 0)),
+    (deck: "comebacks", item: ShopItem(id: "sunglasses", nameEn: "Sunglasses", nameNe: "चश्मा", romanized: "chasma", icon: "🕶️", cost: 0)),
+    (deck: "captions", item: ShopItem(id: "camera", nameEn: "Camera", nameNe: "क्यामेरा", romanized: "kyamera", icon: "📷", cost: 0)),
+    (deck: "lyrics", item: ShopItem(id: "guitar", nameEn: "Guitar", nameNe: "गितार", romanized: "gitar", icon: "🎸", cost: 0)),
+]
+
+/// The teen MYSTERY pool: one random draw at 4 teen missions.
+let teenPrizeItems: [ShopItem] = [
+    ShopItem(id: "sneakers", nameEn: "Sneakers", nameNe: "जुत्ता", romanized: "juttaa", icon: "👟", cost: 0),
+    ShopItem(id: "basketball", nameEn: "Basketball", nameNe: "बास्केटबल", romanized: "basketbal", icon: "🏀", cost: 0),
+    ShopItem(id: "controller", nameEn: "Game Controller", nameNe: "भिडियो गेम", romanized: "bhidiyo gem", icon: "🎮", cost: 0),
+]
+
+/// Every teen reward in display order (golden ball, lesson prizes,
+/// mystery pool) — drives the My Ghar Teen Rewards shelf and the
+/// tap-to-speak lookup.
+let teenShowcaseItems: [ShopItem] = [teenBallItem] + teenDeckPrizes.map(\.item) + teenPrizeItems
+
+/// Teen prize names are spoken by Prakash (ElevenLabs clips named
+/// teenprize_<id>_np.m4a) — checked first in sayDecoration.
+let teenPrizeAudioIDs: Set<String> = Set(teenShowcaseItems.map(\.id))
+
+/// Memberwise init for code-built missions — Mission's own init is
+/// decoder-only (Models.swift), and teen missions live in code, not
+/// the pack, so pack mission counts (dog, streaks, free tier) stay
+/// exactly as they were.
+extension Mission {
+    init(id: String, titleEn: String, titleNe: String, promptEn: String, promptNe: String,
+         audioUrl: String, festival: String?, ageBand: String, xp: Int, verifiedXp: Int,
+         hasAudio: Bool, difficulty: String?) {
+        self.id = id
+        self.titleEn = titleEn
+        self.titleNe = titleNe
+        self.promptEn = promptEn
+        self.promptNe = promptNe
+        self.audioUrl = audioUrl
+        self.festival = festival
+        self.ageBand = ageBand
+        self.xp = xp
+        self.verifiedXp = verifiedXp
+        self.hasAudio = hasAudio
+        self.difficulty = difficulty
+    }
+}
+
+/// The teen mission set (Som's cousins asked for it, 2026-10-23):
+/// real-world missions built on the teen decks — texting, slang,
+/// captions, comebacks, lyrics. Self-serve completion: teens hold
+/// to confirm and earn the full verified XP — no grown-up gate,
+/// no recording. (Nepali titles/prompts are drafts pending Som's
+/// sanity check, like all new copy.)
+enum TeenMissions {
+    static let all: [Mission] = [
+        Mission(id: "teen-text-it", titleEn: "Text It For Real", titleNe: "साँच्चै मेसेज गर",
+                promptEn: "Send a real text or DM to a family member using a Nepali phrase from the Texting deck — try 'ke chha?' (how are you?) or 'sanchai chhu' (I'm good).",
+                promptNe: "परिवारलाई नेपालीमा मेसेज पठाऊ!",
+                audioUrl: "/audio/nepal-v1/teen-text-it.m4a", festival: nil, ageBand: "rooted",
+                xp: 10, verifiedXp: 25, hasAudio: true, difficulty: "teen"),
+        Mission(id: "teen-teach-slang", titleEn: "Teach the Slang", titleNe: "स्ल्याङ सिकाऊ",
+                promptEn: "Teach a friend one Nepali slang word from the Slang deck — and use it in a real sentence.",
+                promptNe: "साथीलाई एउटा नेपाली स्ल्याङ शब्द सिकाऊ!",
+                audioUrl: "/audio/nepal-v1/teen-teach-slang.m4a", festival: nil, ageBand: "rooted",
+                xp: 10, verifiedXp: 25, hasAudio: true, difficulty: "teen"),
+        Mission(id: "teen-caption", titleEn: "Caption That", titleNe: "क्याप्सन लेख",
+                promptEn: "Write a Nepali caption for a real photo of yours — post it or send it to family.",
+                promptNe: "आफ्नो फोटोको लागि नेपाली क्याप्सन लेख!",
+                audioUrl: "/audio/nepal-v1/teen-caption.m4a", festival: nil, ageBand: "rooted",
+                xp: 10, verifiedXp: 25, hasAudio: true, difficulty: "teen"),
+        Mission(id: "teen-comeback", titleEn: "Comeback Ready", titleNe: "जवाफ दिन सिक",
+                promptEn: "Learn one comeback from the Comebacks deck and say it out loud to someone at home.",
+                promptNe: "एउटा जवाफ सिकेर घरमा भन!",
+                audioUrl: "/audio/nepal-v1/teen-comeback.m4a", festival: nil, ageBand: "rooted",
+                xp: 10, verifiedXp: 25, hasAudio: true, difficulty: "teen"),
+        Mission(id: "teen-lyrics", titleEn: "Lyrics Check", titleNe: "गीतको अर्थ",
+                promptEn: "Pick one line from the Lyrics deck, learn what it really means, and explain it to someone.",
+                promptNe: "गीतको एउटा लाइनको अर्थ सिकेर बुझाऊ!",
+                audioUrl: "/audio/nepal-v1/teen-lyrics.m4a", festival: nil, ageBand: "rooted",
+                xp: 10, verifiedXp: 25, hasAudio: true, difficulty: "teen"),
+        Mission(id: "teen-order", titleEn: "Order in Nepali", titleNe: "नेपालीमा अर्डर",
+                promptEn: "Use Nepali to order or ask for food — numbers and food words count!",
+                promptNe: "नेपालीमा खाना अर्डर गर!",
+                audioUrl: "/audio/nepal-v1/teen-order.m4a", festival: nil, ageBand: "rooted",
+                xp: 10, verifiedXp: 25, hasAudio: true, difficulty: "teen"),
+        Mission(id: "teen-call-home", titleEn: "Call Home", titleNe: "घरमा फोन",
+                promptEn: "Greet a grandparent or relative in Nepali on a call — a full sentence, not just 'hi'.",
+                promptNe: "फोनमा नेपालीमा अभिवादन गर!",
+                audioUrl: "/audio/nepal-v1/teen-call-home.m4a", festival: nil, ageBand: "rooted",
+                xp: 10, verifiedXp: 25, hasAudio: true, difficulty: "teen"),
+        Mission(id: "teen-teach-back", titleEn: "Teach It Back", titleNe: "सिकाएर देखाऊ",
+                promptEn: "Teach someone at home one Nepali word — say it, have them repeat it back.",
+                promptNe: "घरमा कसैलाई एउटा नेपाली शब्द सिकाऊ!",
+                audioUrl: "/audio/nepal-v1/teen-teach-back.m4a", festival: nil, ageBand: "rooted",
+                xp: 10, verifiedXp: 25, hasAudio: true, difficulty: "teen"),
+    ]
+}
+
+/// Bundled My Ghar art: the generated room, dog poses and decoration
+/// sprites live in Content/images/myghar (copied by BundleContent.sh).
+/// Decoded-sprite cache. Without it, every redraw of My Ghar re-read
+/// and re-decoded every PNG from disk — and that screen redraws
+/// constantly (dog timers, bobbing, swaying) — so the tab stuttered.
+/// Decode each picture once per launch, then serve it from memory.
+private let myGharImageCache = NSCache<NSString, UIImage>()
+
+func myGharUIImage(_ name: String) -> UIImage? {
+    if let cached = myGharImageCache.object(forKey: name as NSString) {
+        return cached
+    }
+    guard let url = Bundle.main.url(forResource: name, withExtension: "png",
+                                    subdirectory: "Content/images/myghar"),
+          let img = UIImage(contentsOfFile: url.path) else { return nil }
+    myGharImageCache.setObject(img, forKey: name as NSString)
+    return img
+}
+
+func myGharSprite(_ name: String) -> Image? {
+    guard let ui = myGharUIImage(name) else { return nil }
+    return Image(uiImage: ui)
+}
+
+/// The pet dog as real art. Same inputs the parent already drives
+/// (pose, phases, flip, bounce, spin) — only the rendering changed:
+/// a pose sprite instead of hand-drawn shapes. `stage` picks the art
+/// set: 0 puppy, 1 young dog, 2 big dog — grown with bones 🦴.
+struct SpriteDogView: View {
+    var pose: DogPose = .idle
+    var walkPhase: Double = 0
+    var wagPhase: Double = 0
+    var blinking: Bool = false
+    var facingRight: Bool = true
+    var carryingBall: Bool = false
+    var bounce: Double = 0
+    var spinDegrees: Double = 0
+    var stage: Int = 0
+
+    private var assetName: String {
+        let prefix = stage >= 2 ? "dog_adult" : stage == 1 ? "dog_young" : "dog_puppy"
+        if carryingBall { return "\(prefix)_ball" }
+        switch pose {
+        case .sitting: return "\(prefix)_sitting"
+        case .walking: return stage >= 2 ? "\(prefix)_standing" : "\(prefix)_walking"
+        case .idle: return "\(prefix)_standing"
+        }
+    }
+
+    var body: some View {
+        Group {
+            if let img = myGharSprite(assetName) {
+                img.resizable().scaledToFit()
+            } else {
+                Text("🐕").font(.system(size: 60))
+            }
+        }
+        .scaleEffect(x: facingRight ? 1 : -1, y: 1)
+        .rotationEffect(.degrees(spinDegrees))
+        .offset(y: -bounce * 22 + (pose == .walking ? -abs(sin(walkPhase)) * 5 : 0))
+    }
+}
+
+/// First-open tour of My Ghar (Som's ask, 2026-10-22): four stops —
+/// the room, the Trophy Shelf, the shop, Arrange — each narrated by
+/// Som's clone (myghar_tour1..4 in the pack audio). Runs once ever.
+enum MyGharTourStep: CaseIterable {
+    case room, trophies, shop, arrange
+
+    var anchorID: String {
+        switch self {
+        case .room: return "myghar.room"
+        case .trophies: return "myghar.trophies"
+        case .shop: return "myghar.shop"
+        case .arrange: return "myghar.arrange"
+        }
+    }
+    var emoji: String {
+        switch self {
+        case .room: return "🏠"
+        case .trophies: return "🏆"
+        case .shop: return "🏪"
+        case .arrange: return "🔀"
+        }
+    }
+    var nepali: String {
+        switch self {
+        case .room: return "यो तिम्रो घर हो!"
+        case .trophies: return "इनामहरू यहाँ बस्छन्!"
+        case .shop: return "XP ले घर सजाऊ!"
+        case .arrange: return "सारेर आफ्नो कोठा मिलाऊ!"
+        }
+    }
+    var english: String {
+        switch self {
+        case .room: return "This is your Ghar — everything you earn lives here"
+        case .trophies: return "Prizes live here — earned, not bought"
+        case .shop: return "Spend XP to decorate your Ghar"
+        case .arrange: return "Drag decorations to arrange your room"
+        }
+    }
+}
+
+/// One stop of the My Ghar tour — same banner shape as the lesson tour,
+/// floating at the bottom of the tab while the page scrolls to the stop.
+struct MyGharTourBanner: View {
+    let step: MyGharTourStep
+    let isLast: Bool
+    let onNext: () -> Void
+    let onSkip: () -> Void
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Text(step.emoji).font(.system(size: 40))
+            VStack(alignment: .leading, spacing: 2) {
+                Text(step.nepali).font(.title3).bold()
+                Text(step.english).font(.subheadline).foregroundStyle(.secondary)
+            }
+            Spacer()
+            Button(isLast ? "Done ✓" : "Next ➜", action: onNext)
+                .buttonStyle(.borderedProminent)
+            Button(action: onSkip) {
+                Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(12)
+        .background(.regularMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .shadow(radius: 8, y: 4)
+    }
+}
+
+/// Which room animal the under-room action bar is controlling.
+enum RoomPal {
+    case dog, parrot
+}
+
 struct MyGharView: View {
     let pack: ContentPack
     @AppStorage("ghar.xp.total") private var totalXP = 0
@@ -3413,6 +7222,7 @@ struct MyGharView: View {
     @AppStorage("ghar.last.win") private var lastWin = ""
     @AppStorage("ghar.shop.owned") private var ownedData = Data()
     @AppStorage("ghar.missions.verified") private var verifiedData = Data()
+    @AppStorage("ghar.missions.completed") private var completedData = Data()
     @AppStorage("ghar.sets.awarded") private var awardedSetsData = Data()
     // Suga the parrot: his name, the word ids he's been taught,
     // how many times he's been fed, and big-ticket upgrades owned.
@@ -3421,9 +7231,19 @@ struct MyGharView: View {
     @AppStorage("ghar.buddy.taught") private var taughtData = Data()
     @AppStorage("ghar.buddy.fed") private var feedCount = 0
     @AppStorage("ghar.upgrades.owned") private var upgradesData = Data()
+    @AppStorage("ghar.upgrades.stored") private var storedUpgradesData = Data()
     // Storage: decorations the kid bought but put away. They're not on
     // the house, cost nothing to put back, and never earn XP twice.
     @AppStorage("ghar.shop.stored") private var storedData = Data()
+    @AppStorage("ghar.premium.unlocked") private var isUnlocked = false
+    @State private var showingPaywall = false
+
+    /// Free tier: 3 decorations. The auto-granted Prove-it prizes
+    /// (goldenDiyo, starBadge, mukut) and streak milestones
+    /// (flameDiyo, streakCrown) don't count — they're earned, not bought.
+    private var purchasableOwnedCount: Int {
+        ownedIDs.subtracting(["goldenDiyo", "starBadge", "mukut", "flameDiyo", "streakCrown", "quiz50", "quiz100", "quiz250", "quiz500"]).count
+    }
     // Arrange mode: drag deltas per decoration id, so kids can reposition
     // things. [x, y] pairs added on top of each item's home spot.
     @AppStorage("ghar.layout") private var layoutData = Data()
@@ -3440,11 +7260,69 @@ struct MyGharView: View {
     @State private var shopOpen = false
     @State private var setsOpen = false
     @State private var prizesOpen = false
+    @State private var mysteryOpen = false
     @State private var upgradesOpen = false
+    @State private var parrotOpen = false
+    // Dog buddy: unlocked by completing ALL missions. More interactive than Suga.
+    @State private var dogOpen = false
+    @AppStorage("ghar.dog.name") private var dogName = "Bhunte"
+    // Bones 🦴: the dog's own currency. Earned 1:1 alongside XP anywhere
+    // in the app (synced from the XP total — see syncBones), used for
+    // nothing but growing: 50 🦴 -> young dog, 150 🦴 -> big dog.
+    // The stage itself is claimed with the Level Up button.
+    @AppStorage("ghar.dog.bones") private var bones = 0
+    @AppStorage("ghar.dog.bonesSyncedXP") private var bonesSyncedXP = 0
+    @AppStorage("ghar.dog.bonesInit") private var bonesInit = false
+    @AppStorage("ghar.dog.stage") private var dogStage = 0
+    @State private var renamingDog = false
+    @State private var dogNameDraft = ""
+    @State private var dogNameError: String?
+    @State private var teachingTrick = false
+    @State private var trickName = ""
+    @AppStorage("ghar.dog.tricks") private var dogTricksData = Data()
+    @State private var fetching = false
+    // @AppStorage, not @State (audit fix, 2026-10-21): as @State the
+    // daily fetch cap silently reset whenever the app relaunched —
+    // kill the app, reopen, 5 more paid throws. Persisted, the cap is
+    // a real cap (the date guard in throwBall resets it per day).
+    @AppStorage("ghar.dog.fetchCount") private var fetchCount = 0
+    @AppStorage("ghar.dog.fetchDate") private var lastFetchDate = ""
+    @State private var petting = false
+    // Living-dog animation clocks, driven by Timers in startDogTimers().
+    @State private var dogPose: DogPose = .idle
+    @State private var dogWalkPhase = 0.0
+    @State private var dogWagPhase = 0.0
+    @State private var dogBlinking = false
+    @State private var dogFacingRight = true
+    @State private var dogCarryingBall = false
+    @State private var dogBounce = 0.0
+    @State private var dogSpinDegrees = 0.0
+    @State private var dogRoamX: CGFloat = 0
+    // First-open tour of My Ghar (Som's ask, 2026-10-22): once ever,
+    // four stops, his clone narrating each (tour1..4 in the pack).
+    @AppStorage("ghar.myghar.toured") private var myGharToured = false
+    @State private var myTourStep: MyGharTourStep? = nil
+    @State private var roomSelection: RoomPal? = nil
+    @State private var fetchBallX: CGFloat = 0
+    @State private var fetchBallVisible = false
+    @State private var dogTimer: Timer?
+    @State private var dogRoamTimer: Timer?
+    // Keyboard focus for house name field — Done button dismisses it.
+    @FocusState private var houseNameFocused: Bool
     // Naming sheet after adopting Suga; teach sheet for new words.
     @State private var namingBuddy = false
     @State private var teachingBuddy = false
+    @State private var renamingBuddy = false
+    @State private var mimickingBuddy = false
     @State private var buddyNameDraft = ""
+    // Mimic mode: kid records, Suga squawks it back pitched-up.
+    @State private var mimicRecorder: AVAudioRecorder?
+    @State private var mimicURL: URL?
+    @State private var mimicRecording = false
+    @State private var mimicEngine: AVAudioEngine?
+    @State private var sugaEngine: AVAudioEngine?
+    /// Serial queue for mimic recording — keeps it off the main thread.
+    private let mimicQueue = DispatchQueue(label: "ghar.mimic", qos: .userInitiated)
     // Living-house animation flags: gentle loops that never stop.
     @State private var buddyBob = false
     @State private var flameFlicker = false
@@ -3474,7 +7352,6 @@ struct MyGharView: View {
         ShopItem(id: "rangoli", nameEn: "Rangoli", nameNe: "रंगोली", romanized: "rangoli", icon: "🎨", cost: 45),
         ShopItem(id: "mala", nameEn: "Garland", nameNe: "माला", romanized: "mala", icon: "🌸", cost: 55),
         ShopItem(id: "buddy", nameEn: "Suga (Parrot)", nameNe: "सुगा", romanized: "suga", icon: "🦜", cost: 140),
-        ShopItem(id: "kukur", nameEn: "Dog", nameNe: "कुकुर", romanized: "kukur", icon: "🐕", cost: 70),
         ShopItem(id: "changa", nameEn: "Kite", nameNe: "चङ्गा", romanized: "changa", icon: "🪁", cost: 85),
         ShopItem(id: "himal", nameEn: "Himalayas", nameNe: "हिमाल", romanized: "himal", icon: "🏔️", cost: 105),
         ShopItem(id: "ghanta", nameEn: "Temple bell", nameNe: "घण्टा", romanized: "ghanta", icon: "🔔", cost: 125),
@@ -3488,21 +7365,48 @@ struct MyGharView: View {
         ShopItem(id: "goldenDiyo", nameEn: "Golden Diyo", nameNe: "सुनौलो दियो", romanized: "sunaulo diyo", icon: "🪔", cost: 0),
         ShopItem(id: "starBadge", nameEn: "Star Badge", nameNe: "तारा", romanized: "tara", icon: "⭐", cost: 0),
         ShopItem(id: "mukut", nameEn: "Mukut Crown", nameNe: "मुकुट", romanized: "mukut", icon: "👑", cost: 0),
+        ShopItem(id: "flameDiyo", nameEn: "Flame Diyo", nameNe: "ज्वाला दियो", romanized: "jwala diyo", icon: "🔥", cost: 0),
+        ShopItem(id: "streakCrown", nameEn: "Streak Crown", nameNe: "लगातार मुकुट", romanized: "lagatar mukut", icon: "👑", cost: 0),
+        ShopItem(id: "quiz50", nameEn: "Jhilimili Sticker", nameNe: "झिलिमिली", romanized: "jhilimili", icon: "✨", cost: 0),
+        ShopItem(id: "quiz100", nameEn: "Surya Sticker", nameNe: "सूर्य", romanized: "surya", icon: "☀️", cost: 0),
+        ShopItem(id: "quiz250", nameEn: "Himal Sticker", nameNe: "हिमाल", romanized: "himal", icon: "🏔️", cost: 0),
+        ShopItem(id: "quiz500", nameEn: "Sagarmatha Sticker", nameNe: "सगरमाथा", romanized: "sagarmatha", icon: "🗻", cost: 0),
     ]
     private let exclusiveNeed = ["goldenDiyo": 1, "starBadge": 3, "mukut": 5]
+
+    /// The room stage: designed at 310x400, scaled up to fill the screen
+    /// width. Scene offsets and sizes multiply by stageK so the whole
+    /// diorama grows together. The 760 cap is sized for iPad — every
+    /// iPhone's width lands below it, so phones are unaffected.
+    private var stageW: CGFloat { min(UIScreen.main.bounds.width - 24, 760) }
+    private var stageK: CGFloat { stageW / 310 }
+    private var stageH: CGFloat { 400 * stageK }
+
+    /// One small action chip for the under-room pal bar.
+    private func palChip(_ title: String, icon: String, cost: String, disabled: Bool = false, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 5) {
+                Image(systemName: icon).font(.callout)
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(title).font(.callout).bold()
+                    Text(cost).font(.caption2).foregroundStyle(.secondary)
+                }
+            }
+            .padding(.horizontal, 4)
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.small)
+        .disabled(disabled)
+    }
+
 
     // Big-ticket upgrades: long-term XP goals that change the yard.
     // Garden (phulbari) blooms flowers; chautari grows the classic
     // Nepali rest-stop tree with its stone platform.
-    private let upgradeItems: [ShopItem] = [
-        ShopItem(id: "garden", nameEn: "Flower Garden", nameNe: "फूलबारी", romanized: "phulbari", icon: "🌷", cost: 210),
-        ShopItem(id: "chautari", nameEn: "Chautari Tree", nameNe: "चौतारी", romanized: "chautari", icon: "🌳", cost: 280),
-    ]
-
     // Decoration sets: own every item in a set, pocket a bonus. The long game.
     private let decoSets: [DecoSet] = [
         DecoSet(id: "tihar", nameEn: "Tihar Set", itemIds: ["diyo", "sayapatri", "rangoli", "mala"], bonus: 40),
-        DecoSet(id: "garden", nameEn: "Garden Set", itemIds: ["tulsi", "jamara", "kukur"], bonus: 50),
+        DecoSet(id: "garden", nameEn: "Garden Set", itemIds: ["tulsi", "jamara"], bonus: 50),
         DecoSet(id: "home", nameEn: "Home Set", itemIds: ["door", "windows", "flags", "buddy"], bonus: 60),
         DecoSet(id: "sky", nameEn: "Sky & Temple Set", itemIds: ["changa", "himal", "ghanta", "mandir"], bonus: 100),
     ]
@@ -3515,6 +7419,11 @@ struct MyGharView: View {
     /// IDs of grown-up-verified missions — drives the Prove-it prizes.
     private var verifiedIDs: Set<String> {
         (try? JSONDecoder().decode(Set<String>.self, from: verifiedData)) ?? []
+    }
+
+    /// IDs of completed missions — drives the dog unlock (all missions done).
+    private var completedIDs: Set<String> {
+        (try? JSONDecoder().decode(Set<String>.self, from: completedData)) ?? []
     }
 
     /// Set ids whose completion bonus was already paid (paid once, ever).
@@ -3532,6 +7441,11 @@ struct MyGharView: View {
         (try? JSONDecoder().decode(Set<String>.self, from: upgradesData)) ?? []
     }
 
+    /// Upgrade ids put away in storage — off the house, free to put back.
+    private var storedUpgradeIDs: Set<String> {
+        (try? JSONDecoder().decode(Set<String>.self, from: storedUpgradesData)) ?? []
+    }
+
     /// Decoration ids bought but put away in storage — off the house.
     private var storedIDs: Set<String> {
         (try? JSONDecoder().decode(Set<String>.self, from: storedData)) ?? []
@@ -3543,31 +7457,115 @@ struct MyGharView: View {
         (try? JSONDecoder().decode([String: [Double]].self, from: layoutData)) ?? [:]
     }
 
-    /// A decoration's final offset: its home spot + saved drag + the live
-    /// drag in progress (so it follows the finger).
-    private func placedOffset(_ id: String, x: CGFloat, y: CGFloat) -> CGSize {
-        let s = layoutDeltas[id] ?? [0, 0]
-        let live = dragDeltas[id] ?? .zero
-        return CGSize(
-            width: x + CGFloat(s[0]) + live.width,
-            height: y + CGFloat(s.count > 1 ? s[1] : 0) + live.height
+    /// Home spots (design coords) per decoration id, remembered from the
+    /// last render so commitDrag clamps against the same geometry
+    /// placedOffset draws with. Static on purpose: it is written during
+    /// body evaluation and must never trigger a re-render.
+    private static var homeSpots: [String: CGPoint] = [:]
+
+    /// Keep an item's center inside the room stage (16pt margin), so an
+    /// arranged decoration can never be dragged off-screen and lost —
+    /// spots are saved, so an unclamped drop would be unrecoverable
+    /// (there is no reset-layout button). Items may still overhang an
+    /// edge; the center just can't leave the room.
+    private func clampToStage(_ offset: CGSize) -> CGSize {
+        CGSize(
+            width: min(max(offset.width, -stageW / 2 + 16), stageW / 2 - 16),
+            height: min(max(offset.height, -stageH / 2 + 16), stageH / 2 - 16)
         )
     }
 
-    /// Finger lifted: fold the drag into the saved layout.
+    /// A decoration's final offset: its home spot + saved drag + the live
+    /// drag in progress (so it follows the finger), clamped to the stage.
+    /// Clamping at render also rescues spots saved outside the room
+    /// before this clamp existed — they snap back to the nearest edge.
+    private func placedOffset(_ id: String, x: CGFloat, y: CGFloat) -> CGSize {
+        Self.homeSpots[id] = CGPoint(x: x, y: y)
+        let s = layoutDeltas[id] ?? [0, 0]
+        let live = dragDeltas[id] ?? .zero
+        return clampToStage(CGSize(
+            width: x * stageK + CGFloat(s[0]) + live.width,
+            height: y * stageK + CGFloat(s.count > 1 ? s[1] : 0) + live.height
+        ))
+    }
+
+    /// Finger lifted: fold the drag into the saved layout — clamped to
+    /// the stage via the item's home spot, so storage can never hold an
+    /// out-of-room position (which would leave the item stuck at the
+    /// edge for the first part of its next drag).
     private func commitDrag(_ id: String, translation: CGSize) {
         var deltas = layoutDeltas
         let cur = deltas[id] ?? [0, 0]
-        deltas[id] = [cur[0] + Double(translation.width),
-                       (cur.count > 1 ? cur[1] : 0) + Double(translation.height)]
+        var dx = cur[0] + Double(translation.width)
+        var dy = (cur.count > 1 ? cur[1] : 0) + Double(translation.height)
+        if let home = Self.homeSpots[id] {
+            let clamped = clampToStage(CGSize(
+                width: home.x * stageK + CGFloat(dx),
+                height: home.y * stageK + CGFloat(dy)))
+            dx = Double(clamped.width - home.x * stageK)
+            dy = Double(clamped.height - home.y * stageK)
+        }
+        deltas[id] = [dx, dy]
         layoutData = (try? JSONEncoder().encode(deltas)) ?? Data()
         dragDeltas[id] = nil
     }
 
+    // MARK: My Ghar first-open tour
+
+    /// First open ever: flag it immediately (a mid-tour quit doesn't
+    /// re-run it), settle a beat, then start at the room with his
+    /// clone narrating.
+    private func startMyGharTourIfNeeded() {
+        guard !myGharToured else { return }
+        myGharToured = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+            myTourStep = .room
+            sayDecoration(id: "tour1", nepali: "यो तिम्रो घर हो!", romanized: "yo timro ghar ho!")
+        }
+    }
+
+    private func advanceMyGharTour() {
+        guard let step = myTourStep else { return }
+        switch step {
+        case .room:
+            myTourStep = .trophies
+            sayDecoration(id: "tour2", nepali: "इनामहरू यहाँ बस्छन्!", romanized: "inaamharu yahaa baschhan!")
+        case .trophies:
+            myTourStep = .shop
+            sayDecoration(id: "tour3", nepali: "XP ले घर सजाऊ!", romanized: "XP le ghar sajaau!")
+        case .shop:
+            myTourStep = .arrange
+            sayDecoration(id: "tour4", nepali: "सारेर आफ्नो कोठा मिलाऊ!", romanized: "saarera aafno kotha milaau!")
+        case .arrange:
+            myTourStep = nil
+        }
+    }
+
     /// What the kid named the parrot — "Suga" until they pick a name.
+    /// Sanitized on read too, so a name saved before the sanity checks
+    /// can't show anything rude.
     private var buddyDisplayName: String {
-        let trimmed = buddyName.trimmingCharacters(in: .whitespaces)
-        return trimmed.isEmpty ? "Suga" : trimmed
+        let trimmed = buddyName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, buddyNameError(trimmed) == nil else { return "Suga" }
+        return trimmed
+    }
+
+    /// Parrot-name sanity: short, letters only (Latin + Devanagari, plus
+    /// space/hyphen/apostrophe), nothing rude. Empty is fine — it just
+    /// keeps the default "Suga". Returns the problem, or nil when OK.
+    private func buddyNameError(_ raw: String) -> String? {
+        let name = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { return nil }
+        if name.count > 14 { return "Keep it short — 14 letters max" }
+        let allowed = CharacterSet.letters.union(CharacterSet(charactersIn: " -'"))
+        if name.rangeOfCharacter(from: allowed.inverted) != nil {
+            return "Letters only, please!"
+        }
+        let words = name.lowercased().split { !$0.isLetter }
+        if words.contains(where: { BuddyBannedWords.contains(String($0)) }) {
+            return "Let's pick a nicer name 🦜"
+        }
+        return nil
     }
 
     /// Every word in the pack — the teach-a-word picker list.
@@ -3583,6 +7581,8 @@ struct MyGharView: View {
     private func shopItem(_ id: String) -> ShopItem {
         shopItems.first { $0.id == id }
             ?? exclusiveItems.first { $0.id == id }
+            ?? mysteryBoxPrizes.first { $0.id == id }
+            ?? teenShowcaseItems.first { $0.id == id }
             ?? shopItems[0]
     }
 
@@ -3590,16 +7590,27 @@ struct MyGharView: View {
     /// recorded it (`mygharAudio` in the pack), otherwise the phone's own
     /// voice — the same recording-first pattern as everywhere else.
     private func sayDecoration(id: String, nepali: String, romanized: String) {
+        // Teen prizes speak in Prakash's voice (ElevenLabs clips) —
+        // the teen surface is his, not the clone's or the robot's.
+        if teenPrizeAudioIDs.contains(id),
+           let url = URL(string: GharAPI.baseURLString + "/audio/nepal-v1/teenprize_\(id)_np.m4a") {
+            decoPlayer?.pause()
+            decoPlayer = AVPlayer(url: url)
+            decoPlayer?.play()
+            return
+        }
         // If this exact word was already recorded for the decks (दियो, चङ्गा,
         // जमरा…), reuse that clip — same voice, same tone, nothing to record.
         if let w = allWords.first(where: { $0.devanagari == nepali && $0.hasAudio == true }),
            let url = URL(string: GharAPI.baseURLString + w.audioUrl) {
+            decoPlayer?.pause()
             decoPlayer = AVPlayer(url: url)
             decoPlayer?.play()
             return
         }
         if pack.mygharAudio?[id] == true,
            let url = URL(string: GharAPI.baseURLString + "/audio/nepal-v1/myghar_\(id)_np.m4a") {
+            decoPlayer?.pause()
             decoPlayer = AVPlayer(url: url)
             decoPlayer?.play()
         } else {
@@ -3639,6 +7650,7 @@ struct MyGharView: View {
     private let flagColors: [Color] = [.blue, .orange, .red, .green, .yellow]
 
     var body: some View {
+        ScrollViewReader { proxy in
         ScrollView {
             VStack(spacing: 16) {
                 // The nameplate: whatever the kid named their ghar.
@@ -3652,6 +7664,30 @@ struct MyGharView: View {
 
                 Text("⭐ \(totalXP) XP · \(xpTitle.en)")
                     .font(.headline)
+
+                // Growth: bones grow the dog — puppy, young, big dog.
+                if ownedIDs.contains("dog") {
+                    VStack(spacing: 3) {
+                        HStack(spacing: 8) {
+                            growthIcon("dog_puppy_standing", size: 26)
+                                .opacity(dogStage == 0 ? 1 : 0.45)
+                            ProgressView(value: growthProgress, total: 1.0)
+                                .tint(.orange)
+                            growthIcon("dog_adult_standing", size: 34)
+                                .opacity(dogStage == 2 ? 1 : 0.45)
+                        }
+                        HStack {
+                            Text("🦴 \(bones) bones")
+                                .font(.caption)
+                                .bold()
+                            Spacer()
+                            Text(growthLabel)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .padding(.horizontal, 20)
+                }
                 // How it all works: one plain line, no guessing.
                 Text("🎯 Missions +10 · 🎤 Verified +25 · 🎮 Quiz +5")
                     .font(.caption)
@@ -3685,293 +7721,364 @@ struct MyGharView: View {
 
                 // The house scene: a Himalayan morning — sun, clouds, snowy
                 // peaks, and your ghar with its tiered roof.
+                // Mystery treasures: earned from the gift box, displayed on
+                // a shelf above the house. Tap one to hear its Nepali name.
+                let mysteryOwned = mysteryBoxPrizes.filter { ownedIDs.contains($0.id) }
+                if !mysteryOwned.isEmpty {
+                    VStack(spacing: 8) {
+                        Text("🎁 Mystery Treasures")
+                            .font(.headline)
+                        HStack(spacing: 16) {
+                            ForEach(mysteryOwned) { item in
+                                Button(action: { sayDecoration(id: item.id, nepali: item.nameNe, romanized: item.romanized) }) {
+                                    VStack(spacing: 4) {
+                                        AsyncImage(url: URL(string: GharAPI.baseURLString + "/images/nepal-v1/mystery_\(item.id).jpg")) { phase in
+                                            if case .success(let image) = phase {
+                                                image.resizable().scaledToFit()
+                                            } else {
+                                                Text(item.icon)
+                                                    .font(.system(size: 40))
+                                            }
+                                        }
+                                        .frame(width: 56, height: 56)
+                                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                                        Text(item.nameNe)
+                                            .font(.caption)
+                                            .bold()
+                                    }
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                        .padding()
+                        .background(.purple.opacity(0.08))
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                    }
+                    .padding(.horizontal)
+                }
                 ZStack {
-                    RoundedRectangle(cornerRadius: 16)
-                        .fill(LinearGradient(
-                            colors: [.blue.opacity(0.45), .orange.opacity(0.12)],
-                            startPoint: .top, endPoint: .bottom))
-                        .frame(width: 310, height: 400)
-
-                    // Sun with slow-turning rays.
-                    ZStack {
-                        ForEach(0..<8, id: \.self) { i in
-                            Rectangle()
-                                .fill(.yellow.opacity(0.55))
-                                .frame(width: 5, height: 16)
-                                .offset(y: -34)
-                                .rotationEffect(.degrees(Double(i) * 45))
-                        }
-                        Circle()
-                            .fill(.yellow.opacity(0.95))
-                            .frame(width: 44, height: 44)
-                    }
-                    .offset(x: -100, y: -140)
-                    .scaleEffect(poppedID == "sun" ? 1.25 : 1.0)
-                    .rotationEffect(.degrees(sunSpin ? 360 : 0))
-                    .onTapGesture {
-                        sayDecoration(id: "sun", nepali: "सूर्य", romanized: "surya")
-                        poke("sun")
-                    }
-                    .onAppear {
-                        withAnimation(.linear(duration: 30).repeatForever(autoreverses: false)) {
-                            sunSpin = true
+                    // The room: a cozy Nepali interior in generated art.
+                    // The dog and the decorations live inside it now.
+                    Group {
+                        if let bg = myGharSprite("room_bg") {
+                            bg.resizable().scaledToFill()
+                        } else {
+                            Rectangle().fill(.orange.opacity(0.15))
                         }
                     }
+                    .frame(width: stageW, height: stageH)
+                    .clipped()
+                    .clipShape(RoundedRectangle(cornerRadius: 16))
 
-                    DriftingCloud(startX: 70, y: -120) {
-                        sayDecoration(id: "cloud", nepali: "बादल", romanized: "baadal")
-                    }
-                    DriftingCloud(startX: -60, y: -85) {
-                        sayDecoration(id: "cloud", nepali: "बादल", romanized: "baadal")
+                    // His name hangs on the wooden sign in the room.
+                    if ownedIDs.contains("dog") {
+                        Text(dogName)
+                            .font(.system(size: 16 * stageK, weight: .bold, design: .rounded))
+                            .foregroundStyle(Color(red: 0.36, green: 0.22, blue: 0.08))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.55)
+                            .frame(width: 78 * stageK)
+                            .offset(x: -1 * stageK, y: -47 * stageK)
                     }
 
-                    // The Himalayas — revealed when you buy them.
+                    // Prayer flags drape across the top of the room.
+                    flagsOverlay
+                        .offset(x: 0, y: -160 * stageK)
+
+                    // Windows: the dressed-up window covers the room's
+                    // own window exactly — same spot, same size. LOCKED
+                    // there: no Arrange drag and no saved layout delta,
+                    // so it can never end up pasted on the bare wall.
+                    if ownedIDs.contains("windows") {
+                        Group {
+                            if let img = myGharSprite("windows") {
+                                img.resizable().scaledToFill()
+                            } else {
+                                Text("🪟").font(.system(size: 40 * stageK))
+                            }
+                        }
+                        .frame(width: 119 * stageK, height: 198 * stageK)
+                        .clipped()
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                        .scaleEffect(poppedID == "windows" ? 1.05 : 1.0)
+                        .onTapGesture {
+                            sayDecoration(shopItem("windows"))
+                            poke("windows")
+                        }
+                        .offset(x: 95 * stageK, y: -101 * stageK)
+                    }
+
+                    // The Himalayas, framed big on the wall.
                     mountainRange
 
-                    // Ground — layered green with a dirt path to the door.
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(.green.opacity(0.45))
-                        .frame(width: 310, height: 110)
-                        .offset(y: 145)
-                    RoundedRectangle(cornerRadius: 10)
-                        .fill(Color(red: 0.72, green: 0.6, blue: 0.44).opacity(0.85))
-                        .frame(width: 54, height: 64)
-                        .offset(y: 168)
-
-                    // Chimney smoke, puffing behind the roof.
-                    chimneySmoke
-
-                    VStack(spacing: 0) {
-                        // Prayer flags fly above the roof — tap to hear + see them dance.
-                        HStack(spacing: 6) {
-                            ForEach(0..<7, id: \.self) { i in
-                                Triangle()
-                                    .fill(ownedIDs.contains("flags") ? flagColors[i % flagColors.count] : .gray.opacity(0.25))
-                                    .frame(width: 24, height: 20)
-                            }
-                        }
-                        // Prayer flags ripple in the wind forever; tapping
-                        // still makes them jump and say their name.
-                        .rotationEffect(.degrees((poppedID == "flags" ? 14 : 0) + (flagWave ? 7 : -7)))
-                        .onAppear {
-                            withAnimation(.easeInOut(duration: 1.1).repeatForever(autoreverses: true)) {
-                                flagWave = true
-                            }
-                        }
-                        .onTapGesture {
-                            if ownedIDs.contains("flags") {
-                                sayDecoration(shopItem("flags"))
-                                poke("flags")
-                            }
-                        }
-                        .padding(.bottom, 2)
-
-                        // Tiered roof — terracotta gradient with tile rows,
-                        // a nod to Nepali temple architecture. Painted whatever
-                        // color the kid picked.
-                        ZStack {
-                            Triangle()
-                                .fill(LinearGradient(
-                                    colors: [roofColors[roofChoice % roofColors.count].color,
-                                             roofColors[roofChoice % roofColors.count].color.opacity(0.65)],
-                                    startPoint: .top, endPoint: .bottom))
-                                .frame(width: 130, height: 55)
-                            VStack(spacing: 9) {
-                                ForEach(0..<3, id: \.self) { _ in
-                                    Rectangle()
-                                        .fill(.black.opacity(0.14))
-                                        .frame(height: 2)
-                                }
-                            }
-                            .frame(width: 130, height: 55)
-                            .clipShape(Triangle())
-                            .offset(y: 6)
-                        }
-                        ZStack {
-                            Triangle()
-                                .fill(LinearGradient(
-                                    colors: [roofColors[roofChoice % roofColors.count].color,
-                                             roofColors[roofChoice % roofColors.count].color.opacity(0.65)],
-                                    startPoint: .top, endPoint: .bottom))
-                                .frame(width: 260, height: 105)
-                            VStack(spacing: 13) {
-                                ForEach(0..<5, id: \.self) { _ in
-                                    Rectangle()
-                                        .fill(.black.opacity(0.14))
-                                        .frame(height: 2.5)
-                                }
-                            }
-                            .frame(width: 260, height: 105)
-                            .clipShape(Triangle())
-                            .offset(y: 10)
-                            // Eave shadow under the roof lip.
-                            Triangle()
-                                .fill(.black.opacity(0.18))
-                                .frame(width: 260, height: 12)
-                                .offset(y: 52)
-                                .blur(radius: 3)
-                        }
-                        .scaleEffect(poppedID == "roof" ? 1.05 : 1.0)
-                        .onTapGesture {
-                            sayDecoration(id: "roof", nepali: "छाना", romanized: "chhana")
-                            poke("roof")
-                        }
-
-                        // Body — plastered walls with soft shading on a stone foundation.
-                        ZStack {
-                            RoundedRectangle(cornerRadius: 10)
-                                .fill(LinearGradient(
-                                    colors: [wallColors[wallChoice % wallColors.count].color,
-                                             wallColors[wallChoice % wallColors.count].color.opacity(0.82)],
-                                    startPoint: .top, endPoint: .bottom))
-                                .frame(width: 220, height: 150)
-                                .shadow(radius: 3)
-
-                            // Soft shadow under the eaves.
-                            RoundedRectangle(cornerRadius: 10)
-                                .fill(.black.opacity(0.1))
-                                .frame(width: 220, height: 22)
-                                .offset(y: -64)
-                                .blur(radius: 5)
-
-                            // Stone foundation: individual stones, not a flat bar.
-                            HStack(spacing: 4) {
-                                ForEach(0..<6, id: \.self) { i in
-                                    RoundedRectangle(cornerRadius: 4)
-                                        .fill(Color(red: 0.52 + Double(i % 2) * 0.06,
-                                                   green: 0.52 + Double(i % 3) * 0.03,
-                                                   blue: 0.55))
-                                        .frame(width: 32, height: 24)
-                                }
-                            }
-                            .offset(y: 62)
-
-                            HStack(spacing: 80) {
-                                window
-                                window
-                            }
-                            .offset(y: -35)
-                            .scaleEffect(poppedID == "windows" ? 1.15 : 1.0)
-                            .onTapGesture {
-                                if ownedIDs.contains("windows") {
-                                    sayDecoration(shopItem("windows"))
-                                    poke("windows")
-                                }
-                            }
-
-                            // Paneled wooden door in a dark frame — tap to hear
-                            // its name + knock (swings on its hinge).
-                            ZStack {
-                                RoundedRectangle(cornerRadius: 8)
-                                    .fill(Color(red: 0.3, green: 0.2, blue: 0.1))
-                                    .frame(width: 66, height: 100)
-                                RoundedRectangle(cornerRadius: 6)
-                                    .fill(ownedIDs.contains("door")
-                                          ? Color(red: 0.45, green: 0.28, blue: 0.15)
-                                          : .gray.opacity(0.25))
-                                    .frame(width: 58, height: 92)
-                                if ownedIDs.contains("door") {
-                                    // Wood plank grooves.
-                                    HStack(spacing: 13) {
-                                        ForEach(0..<3, id: \.self) { _ in
-                                            Rectangle()
-                                                .fill(.black.opacity(0.22))
-                                                .frame(width: 2, height: 80)
-                                        }
-                                    }
-                                    // Panel insets.
-                                    VStack(spacing: 10) {
-                                        RoundedRectangle(cornerRadius: 3)
-                                            .fill(.black.opacity(0.15))
-                                            .frame(width: 38, height: 28)
-                                        RoundedRectangle(cornerRadius: 3)
-                                            .fill(.black.opacity(0.15))
-                                            .frame(width: 38, height: 28)
-                                    }
-                                    // Iron ring handle.
-                                    Circle()
-                                        .stroke(.yellow.opacity(0.9), lineWidth: 3)
-                                        .frame(width: 13, height: 13)
-                                        .offset(x: 18)
-                                }
-                            }
-                            .rotationEffect(.degrees(poppedID == "door" ? -14 : 0), anchor: .leading)
-                            .onTapGesture {
-                                if ownedIDs.contains("door") {
-                                    sayDecoration(shopItem("door"))
-                                    poke("door")
-                                }
-                            }
-                            .offset(y: 29)
-
-                            // Doorstep.
-                            RoundedRectangle(cornerRadius: 4)
-                                .fill(.gray.opacity(0.55))
-                                .frame(width: 76, height: 12)
-                                .offset(y: 74)
-
-                            diyo
-                                .offset(placedOffset("diyo", x: -70, y: 52))
-                                .arrange("diyo", enabled: arranging, dragDeltas: $dragDeltas, commit: commitDrag)
-                                .scaleEffect(poppedID == "diyo" ? 1.35 : 1.0)
-                                .onTapGesture {
-                                    if ownedIDs.contains("diyo") {
-                                        sayDecoration(shopItem("diyo"))
-                                        poke("diyo")
-                                    }
-                                }
-
-                            // On the walls: garland, bell, and Prove-it prizes.
-                            bodyDeco
-                        }
+                    // A carved door panel standing by the window.
+                    if ownedIDs.contains("door") {
+                        deco("door", size: 76)
+                            .offset(placedOffset("door", x: -122, y: 116))
+                            .arrange("door", enabled: arranging, dragDeltas: $dragDeltas, commit: commitDrag)
                     }
-                    .offset(y: 20)
 
-                    // Suga perches on the roof — tap him to hear him talk.
-                    // (His spot is draggable in Arrange mode, like the rest.)
+                    // The diyo glows at the rug's edge.
+                    diyo
+                        .offset(placedOffset("diyo", x: -112, y: 146))
+                        .arrange("diyo", enabled: arranging, dragDeltas: $dragDeltas, commit: commitDrag)
+                        .scaleEffect(poppedID == "diyo" ? 1.35 : 1.0)
+                        .onTapGesture {
+                            if ownedIDs.contains("diyo") {
+                                sayDecoration(shopItem("diyo"))
+                                poke("diyo")
+                            }
+                        }
+
+                    // On the shelves and walls: garland, bell, prizes.
+                    bodyDeco
+
+                    // Suga perches on the middle shelf — tap him to talk.
                     buddy
-                        .offset(placedOffset("buddy", x: 42, y: -128 + (poppedID == "buddy" ? -16 : 0)))
+                        .offset(placedOffset("buddy", x: 108, y: 100))
                         .arrange("buddy", enabled: arranging, dragDeltas: $dragDeltas, commit: commitDrag)
                         .onTapGesture {
                             if ownedIDs.contains("buddy") {
                                 buddyTalk()
                                 poke("buddy")
+                                if !arranging { roomSelection = .parrot }
                             }
                         }
 
-                    // Feeding moment: the treat pops up at Suga's beak,
-                    // then vanishes as he hops and eats it. It follows him
-                    // if he's been dragged elsewhere in arrange mode.
+                    // The feeding moment: the treat pops up at Suga's beak.
                     if let emoji = feedEmoji {
                         Text(emoji)
                             .font(.system(size: 30))
-                            .offset(placedOffset("buddy", x: 74, y: -116))
+                            .offset(placedOffset("buddy", x: 126, y: 13))
                             .transition(.scale.combined(with: .opacity))
+                    }
+
+                    // The living dog — real art now — walks the rug.
+                    // Tap to hear a happy bark. Draggable in Arrange mode.
+                    if ownedIDs.contains("dog") {
+                        SpriteDogView(
+                            pose: dogPose,
+                            walkPhase: dogWalkPhase,
+                            wagPhase: dogWagPhase,
+                            blinking: dogBlinking,
+                            facingRight: dogFacingRight,
+                            carryingBall: dogCarryingBall,
+                            bounce: petting ? 1.0 : dogBounce,
+                            spinDegrees: dogSpinDegrees,
+                            stage: dogStage
+                        )
+                        .frame(width: 118 * stageK, height: 168 * stageK)
+                        .offset(placedOffset("dog", x: -14 + dogRoamX, y: 110 + (poppedID == "dog" ? -12 : 0)))
+                        .arrange("dog", enabled: arranging, dragDeltas: $dragDeltas, commit: commitDrag)
+                        .onTapGesture {
+                            dogTalk()
+                            poke("dog")
+                            if !arranging { roomSelection = .dog }
+                        }
+                        // Fetch ball: flies out, the dog carries it back.
+                        if fetchBallVisible {
+                            Text("🎾")
+                                .font(.system(size: 26 * stageK))
+                                .offset(placedOffset("dog", x: -14 + dogRoamX + fetchBallX, y: 90))
+                                .transition(.scale)
+                        }
                     }
 
                     // The yard and sky: bought decorations around the house.
                     sceneDeco
                 }
+                .id("myghar.room")
+                .overlay(RoundedRectangle(cornerRadius: 16).stroke(myTourStep == .room ? Color.orange : Color.clear, lineWidth: 3))
+
+                // Pal action bar: appears under the room when you tap
+                // Bhunte or Suga IN the room, so the buttons and the
+                // animal they control stay on screen together. Actions
+                // and learned tricks share one sideways-scrolling row
+                // of small chips: every trick stays reachable on any
+                // phone width, nothing buried below the fold.
+                if let sel = roomSelection {
+                    VStack(spacing: 6) {
+                        HStack {
+                            Text(sel == .dog ? "🐕 \(dogName)" : "🦜 \(buddyDisplayName)")
+                                .font(.subheadline)
+                                .bold()
+                            Spacer()
+                            Button {
+                                roomSelection = nil
+                            } label: {
+                                Image(systemName: "xmark.circle.fill")
+                                    .foregroundStyle(.secondary)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 8) {
+                                if sel == .parrot {
+                                    palChip("Feed", icon: "fork.knife", cost: "5 XP", disabled: totalXP < 5) { feedBuddy() }
+                                    palChip("Teach", icon: "graduationcap", cost: "10 XP", disabled: totalXP < 10) { teachingBuddy = true }
+                                    palChip("Mimic", icon: "mic.fill", cost: "20 XP", disabled: totalXP < 20) { startMimic() }
+                                    palChip("Rename", icon: "pencil", cost: "25 XP", disabled: totalXP < 25) { renamingBuddy = true }
+                                } else {
+                                    palChip("Pet", icon: "hand.raised.fill", cost: "free") { petDog() }
+                                    palChip("Fetch", icon: "tennisball.fill", cost: "+2 XP", disabled: fetchCount >= 5 && lastFetchDate == Streak.todayString) { playFetch() }
+                                    palChip("Teach trick", icon: "graduationcap.fill", cost: "\(dogTricks.count) known") { teachingTrick = true }
+                                    palChip("Rename", icon: "pencil", cost: "free") {
+                                        dogNameDraft = dogName
+                                        dogNameError = nil
+                                        renamingDog = true
+                                    }
+                                    if !dogTricks.isEmpty {
+                                        Divider().frame(height: 28)
+                                        ForEach(dogTricks, id: \.self) { trick in
+                                            Button(action: { performTrick(trick) }) {
+                                                HStack(spacing: 4) {
+                                                    Text("🐾").font(.callout)
+                                                    Text(trick).font(.callout)
+                                                }
+                                                .padding(.horizontal, 4)
+                                            }
+                                            .buttonStyle(.bordered)
+                                            .controlSize(.small)
+                                        }
+                                    }
+                                }
+                            }
+                            .padding(.vertical, 2)
+                        }
+                    }
+                    .padding(10)
+                    .background(sel == .dog ? Color.orange.opacity(0.10) : Color.green.opacity(0.10))
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .padding(.horizontal)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+                    .animation(.easeInOut(duration: 0.2), value: roomSelection)
+                }
+
+                // Trophy shelf: prizes that can't be bought — only earned.
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("🏆 Trophy Shelf")
+                        .font(.headline)
+                        .padding(.horizontal)
+                        .id("myghar.trophies")
+                        .background(myTourStep == .trophies ? Color.orange.opacity(0.25) : Color.clear)
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 14) {
+                            ForEach(exclusiveItems) { item in
+                                let earned = ownedIDs.contains(item.id)
+                                VStack(spacing: 4) {
+                                    Group {
+                                        if let img = myGharSprite(item.id) {
+                                            img.resizable().scaledToFit()
+                                        } else {
+                                            Text(item.icon).font(.system(size: 32))
+                                        }
+                                    }
+                                    .frame(width: 54, height: 54)
+                                    .grayscale(earned ? 0 : 1)
+                                    .opacity(earned ? 1 : 0.45)
+                                    Text(item.nameEn)
+                                        .font(.caption2)
+                                        .bold()
+                                    Text(earned ? "Earned! 🌟" : trophyHint(item.id))
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
+                                        .multilineTextAlignment(.center)
+                                }
+                                .frame(width: 78)
+                                .onTapGesture {
+                                    if earned {
+                                        sayDecoration(item)
+                                        poke(item.id)
+                                    }
+                                }
+                            }
+                        }
+                        .padding(.horizontal)
+                    }
+                }
+
+                // Teen rewards shelf: lesson prizes, mystery prizes
+                // and the golden ball — earned on the teen surface.
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("🎁 Teen Rewards")
+                        .font(.headline)
+                        .padding(.horizontal)
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 14) {
+                            ForEach(teenShowcaseItems) { item in
+                                let earned = ownedIDs.contains(item.id)
+                                VStack(spacing: 4) {
+                                    Group {
+                                        if let img = myGharSprite(item.id) {
+                                            img.resizable().scaledToFit()
+                                        } else {
+                                            Text(item.icon).font(.system(size: 32))
+                                        }
+                                    }
+                                    .frame(width: 54, height: 54)
+                                    .grayscale(earned ? 0 : 1)
+                                    .opacity(earned ? 1 : 0.45)
+                                    Text(item.nameEn)
+                                        .font(.caption2)
+                                        .bold()
+                                        .multilineTextAlignment(.center)
+                                    Text(earned ? "Earned! 🌟" : teenHint(item.id))
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
+                                        .multilineTextAlignment(.center)
+                                }
+                                .frame(width: 78)
+                                .onTapGesture {
+                                    if earned {
+                                        sayDecoration(item)
+                                        poke(item.id)
+                                    }
+                                }
+                            }
+                        }
+                        .padding(.horizontal)
+                    }
+                }
 
                 // Arrange mode: drag anything in the scene to move it.
                 // Spots are saved, so the house keeps your layout.
-                VStack(spacing: 4) {
-                    Button(arranging ? "Done arranging" : "🔀 Arrange house") {
-                        arranging.toggle()
-                    }
-                    .font(.caption)
-                    .buttonStyle(.bordered)
-                    if arranging {
-                        Text("Drag decorations to move them — taps still make them talk!")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
+                // Pushed to the side so it doesn't cover the dog's spot.
+                HStack {
+                    Spacer()
+                    VStack(spacing: 4) {
+                        Button(arranging ? "Done arranging" : "🔀 Arrange house") {
+                            arranging.toggle()
+                        }
+                        .font(.caption)
+                        .buttonStyle(.bordered)
+                        .id("myghar.arrange")
+                        .background(myTourStep == .arrange ? Color.orange.opacity(0.25) : Color.clear)
+                        if arranging {
+                            Text("Drag decorations to move them — taps still make them talk!")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
                     }
                 }
 
                 // Suga's corner: feed him, teach him words. Only shows
-                // once he's adopted from the shop.
+                // once he's adopted from the shop. Collapsible like the shop.
                 if ownedIDs.contains("buddy") {
-                    VStack(spacing: 10) {
+                    DisclosureGroup(isExpanded: $parrotOpen) {
+                        VStack(spacing: 10) {
+                            if feedCount > 0 {
+                                Text("Fed \(feedCount) time\(feedCount == 1 ? "" : "s") 🍌")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Text("Tap Suga in the house — his buttons appear under the room!")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding()
+                        .background(.green.opacity(0.08))
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                    } label: {
                         HStack {
                             Text("🦜 \(buddyDisplayName) (parrot)")
                                 .font(.headline)
@@ -3980,44 +8087,123 @@ struct MyGharView: View {
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
-                        HStack(spacing: 12) {
-                            Button(action: feedBuddy) {
-                                Label("Feed · 5 XP", systemImage: "fork.knife")
+                    }
+                    .padding(.horizontal)
+                }
+
+                // Dog buddy: unlocked by completing ALL missions. More
+                // interactive than Suga — pet, teach tricks, play fetch.
+                if ownedIDs.contains("dog") {
+                    DisclosureGroup(isExpanded: $dogOpen) {
+                        VStack(spacing: 10) {
+                            // Bones balance + the big Level Up moment.
+                            HStack {
+                                Text("🦴 \(bones) bones")
+                                    .font(.headline)
+                                Spacer()
+                                Text(dogStageName)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
                             }
-                            .buttonStyle(.bordered)
-                            .disabled(totalXP < 5)
-                            Button(action: { teachingBuddy = true }) {
-                                Label("Teach a word · 10 XP", systemImage: "graduationcap")
+                            if canLevelUp {
+                                Button(action: levelUpDog) {
+                                    Text("🎉 Level Up! Grow to \(nextStageName)")
+                                        .font(.headline)
+                                        .frame(maxWidth: .infinity)
+                                        .padding(.vertical, 6)
+                                }
+                                .buttonStyle(.borderedProminent)
+                                .tint(.orange)
                             }
-                            .buttonStyle(.bordered)
-                            .disabled(totalXP < 10)
-                        }
-                        if feedCount > 0 {
-                            Text("Fed \(feedCount) time\(feedCount == 1 ? "" : "s") 🍌")
+                            Text("Tap \(dogName) in the house — his play buttons appear under the room!")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
-                        Text("Tap Suga in the house to hear him talk!")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                        .padding()
+                        .background(.orange.opacity(0.08))
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                    } label: {
+                        HStack {
+                            Text("🐕 \(dogName) (dog)")
+                                .font(.headline)
+                            Spacer()
+                            Text("mission master reward")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
                     }
-                    .padding()
-                    .background(.green.opacity(0.08))
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
                     .padding(.horizontal)
+                    .sheet(isPresented: $teachingTrick) {
+                        NavigationStack {
+                            VStack(spacing: 16) {
+                                Text("🐕 Teach \(dogName) a trick!")
+                                    .font(.title2)
+                                    .bold()
+                                Text("Type a trick name in Nepali or English — like \"bas\" (sit) or \"ghum\" (spin).")
+                                    .font(.body)
+                                    .foregroundStyle(.secondary)
+                                    .multilineTextAlignment(.center)
+                                TextField("Trick name…", text: $trickName)
+                                    .textFieldStyle(.roundedBorder)
+                                    .padding(.horizontal)
+                                Button("Teach it!") { saveTrick() }
+                                    .buttonStyle(.borderedProminent)
+                                    .disabled(trickName.trimmingCharacters(in: .whitespaces).isEmpty)
+                                Button("Cancel") { teachingTrick = false }
+                                    .foregroundStyle(.secondary)
+                            }
+                            .padding()
+                            .navigationTitle("New trick")
+                            .navigationBarTitleDisplayMode(.inline)
+                        }
+                    }
+                    .sheet(isPresented: $renamingDog) {
+                        NavigationStack {
+                            VStack(spacing: 16) {
+                                Text("🐕 Rename your dog")
+                                    .font(.title2)
+                                    .bold()
+                                TextField("Dog's name…", text: $dogNameDraft)
+                                    .textFieldStyle(.roundedBorder)
+                                    .padding(.horizontal)
+                                if let err = dogNameError {
+                                    Text(err)
+                                        .font(.caption)
+                                        .foregroundStyle(.red)
+                                }
+                                Button("Save") {
+                                    let name = dogNameDraft.trimmingCharacters(in: .whitespaces)
+                                    if name.isEmpty {
+                                        dogNameError = "Name can't be empty."
+                                    } else if name.count > 14 {
+                                        dogNameError = "Keep it under 14 letters."
+                                    } else {
+                                        dogName = name
+                                        renamingDog = false
+                                    }
+                                }
+                                .buttonStyle(.borderedProminent)
+                                Button("Cancel") { renamingDog = false }
+                                    .foregroundStyle(.secondary)
+                            }
+                            .padding()
+                            .navigationTitle("Rename dog")
+                            .navigationBarTitleDisplayMode(.inline)
+                        }
+                    }
                 }
 
                 // Name your ghar.
                 TextField("Name your ghar…", text: $houseName)
                     .textFieldStyle(.roundedBorder)
                     .padding(.horizontal, 40)
-
-                // Paint shop: pick roof + wall colors.
-                VStack(spacing: 10) {
-                    paintRow(label: "Roof", choices: roofColors, selected: $roofChoice)
-                    paintRow(label: "Walls", choices: wallColors, selected: $wallChoice)
-                }
-                .padding(.horizontal)
+                    .focused($houseNameFocused)
+                    .toolbar {
+                        ToolbarItemGroup(placement: .keyboard) {
+                            Spacer()
+                            Button("Done") { houseNameFocused = false }
+                        }
+                    }
 
                 // Ghar Shop: spend XP to add decorations to your house.
                 // Collapsed by default — tap the header to open.
@@ -4063,6 +8249,8 @@ struct MyGharView: View {
                     HStack {
                         Text("🏪 Ghar Shop")
                             .font(.headline)
+                            .id("myghar.shop")
+                            .background(myTourStep == .shop ? Color.orange.opacity(0.25) : Color.clear)
                         Spacer()
                         Text("\(shopItems.count)")
                             .font(.caption)
@@ -4083,7 +8271,7 @@ struct MyGharView: View {
                 // Collapsed by default — tap the header to open.
                 DisclosureGroup(isExpanded: $prizesOpen) {
                     VStack(alignment: .leading, spacing: 12) {
-                    Text("Verify missions with a grown-up to earn these — they can't be bought.")
+                    Text("Verify missions with a grown-up, keep a streak going, or answer quiz questions to earn these. They can't be bought.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     ForEach(exclusiveItems) { item in
@@ -4097,6 +8285,16 @@ struct MyGharView: View {
                                 if ownedIDs.contains(item.id) {
                                     Text(item.nameNe).font(.headline)
                                     Text("✅ Earned!").font(.caption).foregroundStyle(.green)
+                                } else if item.id == "flameDiyo" || item.id == "streakCrown" {
+                                    Text(item.id == "flameDiyo" ? "🔥 Keep a 7-day streak" : "👑 Keep a 15-day streak")
+                                        .font(.headline)
+                                    Text("\(item.nameNe) · \(item.nameEn)")
+                                        .font(.caption).foregroundStyle(.secondary)
+                                } else if let qneed = QuizStickers.thresholds[item.id] {
+                                    Text("🎯 Get \(qneed) quiz answers right")
+                                        .font(.headline)
+                                    Text("\(item.nameNe) · \(item.nameEn)")
+                                        .font(.caption).foregroundStyle(.secondary)
                                 } else {
                                     Text("🎤 Verify \(need) mission\(need == 1 ? "" : "s")")
                                         .font(.headline)
@@ -4110,9 +8308,29 @@ struct MyGharView: View {
                             .buttonStyle(.bordered)
                             Spacer()
                             if ownedIDs.contains(item.id) {
+                                if !item.id.hasPrefix("quiz") {
+                                    Button("Put away") { storeItem(item) }
+                                        .font(.caption)
+                                        .buttonStyle(.bordered)
+                                }
                                 Image(systemName: "checkmark.circle.fill")
                                     .foregroundStyle(.yellow)
                                     .font(.title3)
+                            } else if storedIDs.contains(item.id) {
+                                Button("Put back") { placeItem(item) }
+                                    .buttonStyle(.bordered)
+                            } else if item.id == "flameDiyo" {
+                                Text("🔒 7-day streak")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            } else if item.id == "streakCrown" {
+                                Text("🔒 15-day streak")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            } else if let qneed = QuizStickers.thresholds[item.id] {
+                                Text("🔒 \(min(QuizStats.correctTotal, qneed))/\(qneed) right")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
                             } else {
                                 Text("🔒 \(have)/\(need) verified")
                                     .font(.caption)
@@ -4137,6 +8355,68 @@ struct MyGharView: View {
                 }
                 .padding()
                 .background(.yellow.opacity(0.08))
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .padding(.horizontal)
+
+                // Mystery Prizes: earned from the gift box, never sold.
+                // Collapsed by default — tap the header to open.
+                DisclosureGroup(isExpanded: $mysteryOpen) {
+                    VStack(alignment: .leading, spacing: 12) {
+                    Text("Finish a tracing section to earn these — they can't be bought.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    ForEach(mysteryBoxPrizes) { item in
+                        HStack(spacing: 12) {
+                            AsyncImage(url: URL(string: GharAPI.baseURLString + "/images/nepal-v1/mystery_\(item.id).jpg")) { phase in
+                                if case .success(let image) = phase {
+                                    image.resizable().scaledToFit()
+                                } else {
+                                    shopIcon(item)
+                                }
+                            }
+                            .frame(width: 58, height: 58)
+                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                            .opacity(ownedIDs.contains(item.id) ? 1 : 0.4)
+                            .grayscale(ownedIDs.contains(item.id) ? 0 : 1)
+                            VStack(alignment: .leading, spacing: 2) {
+                                if ownedIDs.contains(item.id) {
+                                    Text(item.nameNe).font(.headline)
+                                    Text("✅ Earned!").font(.caption).foregroundStyle(.green)
+                                } else {
+                                    Text("🎁 Mystery box").font(.headline)
+                                    Text("\(item.nameNe) · \(item.nameEn)")
+                                        .font(.caption).foregroundStyle(.secondary)
+                                }
+                            }
+                            Button(action: { sayDecoration(item) }) {
+                                Image(systemName: "speaker.wave.2.fill")
+                            }
+                            .buttonStyle(.bordered)
+                            Spacer()
+                            if !ownedIDs.contains(item.id) {
+                                Text("🔒")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                    }
+                } label: {
+                    HStack {
+                        Text("🎁 Mystery Prizes")
+                            .font(.headline)
+                        Spacer()
+                        Text("\(mysteryBoxPrizes.count)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 2)
+                            .background(.gray.opacity(0.2))
+                            .clipShape(Capsule())
+                    }
+                }
+                .padding()
+                .background(.purple.opacity(0.08))
                 .clipShape(RoundedRectangle(cornerRadius: 12))
                 .padding(.horizontal)
 
@@ -4191,56 +8471,8 @@ struct MyGharView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 12))
                 .padding(.horizontal)
 
-                // House Upgrades: big-ticket XP goals that change the yard.
-                // Collapsed by default — tap the header to open.
-                DisclosureGroup(isExpanded: $upgradesOpen) {
-                    VStack(alignment: .leading, spacing: 12) {
-                    Text("Big projects for your ghar — save up!")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    ForEach(upgradeItems) { item in
-                        HStack(spacing: 12) {
-                            Text(item.icon).font(.title2)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(item.nameNe).font(.headline)
-                                Text("\(item.romanized) · \(item.nameEn)").font(.caption).foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                            if upgradeIDs.contains(item.id) {
-                                Image(systemName: "checkmark.circle.fill")
-                                    .foregroundStyle(.green)
-                                    .font(.title3)
-                            } else if totalXP >= item.cost {
-                                Button("Build · \(item.cost) XP") { buyUpgrade(item) }
-                                    .buttonStyle(.borderedProminent)
-                            } else {
-                                Text("🔒 \(item.cost) XP")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                    }
-                    }
-                } label: {
-                    HStack {
-                        Text("🏗️ House Upgrades")
-                            .font(.headline)
-                        Spacer()
-                        Text("\(upgradeItems.count)")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 2)
-                            .background(.gray.opacity(0.2))
-                            .clipShape(Capsule())
-                    }
-                }
-                .padding()
-                .background(.gray.opacity(0.1))
-                .clipShape(RoundedRectangle(cornerRadius: 12))
-                .padding(.horizontal)
 
-                Text("Tap the sun, clouds, roof, or a decoration to hear its Nepali name 🗣️")
+                Text("Tap a decoration in the room to hear its Nepali name 🗣️")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -4248,7 +8480,18 @@ struct MyGharView: View {
         }
         .onAppear {
             grantExclusives()
+            grantDog()
+            grantBall()
+            syncBones()
             checkSets()
+            startDogTimers()
+        }
+        .onDisappear {
+            stopDogTimers()
+        }
+        // Paywall: pops when a free-tier kid tries a 4th decoration.
+        .sheet(isPresented: $showingPaywall) {
+            PaywallView()
         }
         // Naming sheet: pops right after adopting Suga.
         .sheet(isPresented: $namingBuddy) {
@@ -4262,6 +8505,11 @@ struct MyGharView: View {
                     TextField("Name...", text: $buddyNameDraft)
                         .textFieldStyle(.roundedBorder)
                         .padding(.horizontal, 40)
+                    if let err = buddyNameError(buddyNameDraft) {
+                        Text(err)
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                    }
                     Button("Meet \(buddyNameDraft.trimmingCharacters(in: .whitespaces).isEmpty ? "Suga" : buddyNameDraft.trimmingCharacters(in: .whitespaces))!") {
                         buddyName = buddyNameDraft.trimmingCharacters(in: .whitespaces)
                         namingBuddy = false
@@ -4269,9 +8517,97 @@ struct MyGharView: View {
                         sayDecoration(id: "sugaGreeting", nepali: "नमस्ते! म सुगा हुँ!", romanized: "namaste! ma suga hun!")
                     }
                     .buttonStyle(.borderedProminent)
+                    .disabled(buddyNameError(buddyNameDraft) != nil)
                 }
                 .padding()
                 .navigationTitle("New friend")
+            }
+        }
+        // Rename sheet: change Suga's name for 25 XP.
+        .sheet(isPresented: $renamingBuddy) {
+            NavigationStack {
+                VStack(spacing: 16) {
+                    Text("🦜").font(.system(size: 64))
+                    Text("Rename your parrot")
+                        .font(.title2).bold()
+                    Text("25 XP — what should we call him now?")
+                        .foregroundStyle(.secondary)
+                    TextField("New name...", text: $buddyNameDraft)
+                        .textFieldStyle(.roundedBorder)
+                        .padding(.horizontal, 40)
+                        .onAppear { buddyNameDraft = buddyDisplayName == "Suga" ? "" : buddyDisplayName }
+                    if let err = buddyNameError(buddyNameDraft) {
+                        Text(err)
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                    }
+                    Button("Rename · 25 XP") {
+                        let newName = buddyNameDraft.trimmingCharacters(in: .whitespaces)
+                        guard buddyNameError(newName) == nil, totalXP >= 25 else { return }
+                        totalXP -= 25
+                        buddyName = newName
+                        buddyNameDraft = ""
+                        renamingBuddy = false
+                        poke("buddy")
+                        lastWin = "Say hi to \(buddyDisplayName)! 🦜"
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(buddyNameError(buddyNameDraft) != nil || totalXP < 25)
+                }
+                .padding()
+                .navigationTitle("Rename parrot")
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Cancel") { renamingBuddy = false; buddyNameDraft = "" }
+                    }
+                }
+            }
+        }
+        // Mimic sheet: record a clip, Suga squawks it back in parrot voice.
+        .sheet(isPresented: $mimickingBuddy) {
+            NavigationStack {
+                VStack(spacing: 20) {
+                    Text("🦜").font(.system(size: 64))
+                    Text("\(buddyDisplayName) the Mimic")
+                        .font(.title2).bold()
+                    Text("Record something, then hear Suga squawk it back!")
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal)
+                    Button(action: toggleMimicRecord) {
+                        Label(mimicRecording ? "Stop" : (mimicURL == nil ? "Record" : "Re-record"),
+                              systemImage: mimicRecording ? "stop.circle.fill" : "mic.circle.fill")
+                            .font(.title2)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(mimicRecording ? .red : .blue)
+                    if mimicRecording {
+                        Text("🔴 Recording…")
+                            .foregroundStyle(.red)
+                            .font(.headline)
+                    }
+                    if mimicURL != nil && !mimicRecording {
+                        Button(action: playMimicAsParrot) {
+                            Label("Hear Suga say it! 🦜", systemImage: "speaker.wave.2.fill")
+                                .font(.title3)
+                        }
+                        .buttonStyle(.bordered)
+                    }
+                    Spacer()
+                }
+                .padding()
+                .navigationTitle("Parrot Mimic")
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Done") {
+                            mimicRecorder?.stop()
+                            mimicRecorder = nil
+                            mimicRecording = false
+                            mimicEngine?.stop()
+                            mimickingBuddy = false
+                        }
+                    }
+                }
             }
         }
         // Teach sheet: pick any word from the pack, 10 XP, Suga learns it.
@@ -4303,6 +8639,23 @@ struct MyGharView: View {
                 }
             }
         }
+        .overlay(alignment: .bottom) {
+            if let step = myTourStep {
+                MyGharTourBanner(step: step,
+                                 isLast: step == .arrange,
+                                 onNext: advanceMyGharTour,
+                                 onSkip: { myTourStep = nil })
+                    .padding(.horizontal)
+                    .padding(.bottom, 8)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+        .onAppear { startMyGharTourIfNeeded() }
+        .onChange(of: myTourStep) { _, step in
+            guard let step else { return }
+            withAnimation { proxy.scrollTo(step.anchorID, anchor: .top) }
+        }
+        }
     }
 
     /// Buy a decoration: must be affordable and not already owned.
@@ -4310,13 +8663,18 @@ struct MyGharView: View {
     /// celebration — then checks whether a set just got completed.
     private func buy(_ item: ShopItem) {
         guard !ownedIDs.contains(item.id), totalXP >= item.cost else { return }
+        // Free tier: 3 decorations max. The 4th opens the paywall.
+        if !isUnlocked && purchasableOwnedCount >= 3 {
+            showingPaywall = true
+            return
+        }
         totalXP -= item.cost
         var ids = ownedIDs
         ids.insert(item.id)
         ownedData = (try? JSONEncoder().encode(ids)) ?? Data()
         UINotificationFeedbackGenerator().notificationOccurred(.success)
         sayDecoration(item)
-        checkSets()
+        checkSets(silent: true)   // a purchase speaks the item's name ONLY (Som's call, 2026-10-22)
         if item.id == "buddy" {
             buddyNameDraft = ""
             namingBuddy = true
@@ -4328,24 +8686,70 @@ struct MyGharView: View {
     /// (the राम्रो! praise cheer, the नमस्ते! conversation line, each
     /// taught word's own clip) so nothing is recorded twice — anything
     /// still unrecorded falls back to the phone's voice.
+    /// Play a clip in Suga's own voice: pitched up +800 cents
+    /// (about two-thirds of an octave) so the parrot sounds like a
+    /// parrot, not like the grown-up clone. The pitch shifter is
+    /// primed with a beat of silence so its start-up smear lands in
+    /// the silence instead of on the word's first syllable, and the
+    /// engine stops only once the sound has actually played out —
+    /// short words keep their endings. Used for taught words (any
+    /// word can be taught, so those can't be pre-rendered); Suga's
+    /// staple lines are pre-pitched files played plainly instead.
+    private func sugaPlay(_ url: URL) {
+        sugaEngine?.stop()
+        guard let file = try? AVAudioFile(forReading: url) else { return }
+        let format = file.processingFormat
+        guard let raw = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(file.length)) else { return }
+        do { try file.read(into: raw) } catch { return }
+        let primeFrames = AVAudioFrameCount(format.sampleRate * 0.25)
+        guard let primed = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: raw.frameLength + primeFrames),
+              let src = raw.floatChannelData, let dst = primed.floatChannelData else { return }
+        primed.frameLength = raw.frameLength + primeFrames
+        for ch in 0..<Int(format.channelCount) {
+            for i in 0..<Int(primeFrames) { dst[ch][i] = 0 }
+            for i in 0..<Int(raw.frameLength) { dst[ch][Int(primeFrames) + i] = src[ch][i] }
+        }
+        let engine = AVAudioEngine()
+        let player = AVAudioPlayerNode()
+        let pitch = AVAudioUnitTimePitch()
+        pitch.pitch = 800
+        engine.attach(player)
+        engine.attach(pitch)
+        engine.connect(player, to: pitch, format: format)
+        engine.connect(pitch, to: engine.mainMixerNode, format: format)
+        do { try engine.start() } catch { return }
+        player.scheduleBuffer(primed, at: nil, options: [], completionCallbackType: .dataPlayedBack) { _ in
+            DispatchQueue.main.async {
+                self.sugaEngine?.stop()
+            }
+        }
+        player.play()
+        sugaEngine = engine
+    }
+
     private func buddyTalk() {
-        // (nepali, romanized, audioUrl, hasAudio)
-        var options: [(String, String, String, Bool)] = []
+        // (nepali, romanized, audioUrl, hasAudio, prePitchedFile)
+        // The two staples ship as pre-pitched files (rendered once,
+        // perfectly); taught words go through the pitch engine.
+        var options: [(String, String, String, Bool, String?)] = []
         if let ramro = pack.praise?.first(where: { $0.id == "ramro" }) {
-            options.append(("राम्रो छ!", "ramro chha!", ramro.audioUrl, ramro.hasAudio == true))
+            options.append(("राम्रो छ!", "ramro chha!", ramro.audioUrl, ramro.hasAudio == true, "suga_praise_ramro_np.m4a"))
         }
         if let namaste = word("convo_namaste") {
-            options.append(("नमस्ते!", "namaste!", namaste.audioUrl, namaste.hasAudio == true))
+            options.append(("नमस्ते!", "namaste!", namaste.audioUrl, namaste.hasAudio == true, "suga_convo_namaste_np.m4a"))
         }
         for id in taughtIDs {
             if let w = word(id) {
-                options.append((w.devanagari, w.romanized, w.audioUrl, w.hasAudio == true))
+                options.append((w.devanagari, w.romanized, w.audioUrl, w.hasAudio == true, nil))
             }
         }
         guard let pick = options.randomElement() else { return }
-        if pick.3, let url = URL(string: GharAPI.baseURLString + pick.2) {
+        if let pre = pick.4, let url = URL(string: GharAPI.baseURLString + "/audio/nepal-v1/" + pre) {
+            decoPlayer?.pause()
             decoPlayer = AVPlayer(url: url)
             decoPlayer?.play()
+        } else if pick.3, let url = URL(string: GharAPI.baseURLString + pick.2) {
+            sugaPlay(url)
         } else {
             NepaliSpeaker.say(nepali: pick.0, romanized: pick.1)
         }
@@ -4366,7 +8770,84 @@ struct MyGharView: View {
         }
         poke("buddy")
         lastWin = buddyDisplayName + " loved the " + yum + "!"
-        sayDecoration(id: "sugaMitho", nepali: "मिठो छ!", romanized: "mitho chha!")
+        if let url = URL(string: GharAPI.baseURLString + "/audio/nepal-v1/suga_mitho_np.m4a") {
+            decoPlayer?.pause()
+            decoPlayer = AVPlayer(url: url)
+            decoPlayer?.play()
+        } else {
+            NepaliSpeaker.say(nepali: "मिठो छ!", romanized: "mitho chha!")
+        }
+    }
+
+    /// Mimic mode: 20 XP. Kid records a clip, Suga squawks it back
+    /// pitched-up like a parrot. Deducts XP and opens the sheet.
+    private func startMimic() {
+        guard ownedIDs.contains("buddy"), totalXP >= 20 else { return }
+        totalXP -= 20
+        mimicURL = nil
+        mimicRecording = false
+        mimickingBuddy = true
+    }
+
+    /// Start/stop the mimic recording. Uses a temp file in caches.
+    private func toggleMimicRecord() {
+        if mimicRecording {
+            mimicRecorder?.stop()
+            mimicRecorder = nil
+            mimicRecording = false
+        } else {
+            let url = FileManager.default.temporaryDirectory
+                .appendingPathComponent("suga-mimic-\(UUID().uuidString).m4a")
+            let settings: [String: Any] = [
+                AVFormatIDKey: Int(kAudioFormatMPEG4AAC),
+                AVSampleRateKey: 44_100,
+                AVNumberOfChannelsKey: 1,
+                AVEncoderAudioQualityKey: AVAudioQuality.high.rawValue,
+            ]
+            // Record off-main (same pattern as MissionRecorder.sessionQueue).
+            mimicQueue.async {
+                let session = AVAudioSession.sharedInstance()
+                try? session.setCategory(.playAndRecord, mode: .default, options: .defaultToSpeaker)
+                try? session.setActive(true)
+                let rec = try? AVAudioRecorder(url: url, settings: settings)
+                rec?.record()
+                let isRec = rec?.isRecording ?? false
+                DispatchQueue.main.async {
+                    self.mimicRecorder = rec
+                    self.mimicURL = url
+                    self.mimicRecording = isRec
+                }
+            }
+        }
+    }
+
+    /// Play the mimic clip back through a pitch-shifter for the
+    /// squeaky parrot voice (+1200 cents = one octave up).
+    private func playMimicAsParrot() {
+        guard let url = mimicURL else { return }
+        // Stop any existing playback first.
+        mimicEngine?.stop()
+        let engine = AVAudioEngine()
+        let player = AVAudioPlayerNode()
+        let pitch = AVAudioUnitTimePitch()
+        pitch.pitch = 800
+        engine.attach(player)
+        engine.attach(pitch)
+        engine.connect(player, to: pitch, format: nil)
+        engine.connect(pitch, to: engine.mainMixerNode, format: nil)
+        guard let file = try? AVAudioFile(forReading: url) else { return }
+        do {
+            try engine.start()
+        } catch { return }
+        player.scheduleFile(file, at: nil, completionCallbackType: .dataPlayedBack) { _ in
+            DispatchQueue.main.async {
+                self.mimicEngine?.stop()
+            }
+        }
+        player.play()
+        mimicEngine = engine
+        poke("buddy")
+        lastWin = buddyDisplayName + " says it back! 🦜"
     }
 
     /// Teach Suga a word: 10 XP. He learns it, says it on the spot, and
@@ -4382,8 +8863,7 @@ struct MyGharView: View {
         // The word's own recording when it exists — no re-recording.
         if w.hasAudio == true,
            let url = URL(string: GharAPI.baseURLString + w.audioUrl) {
-            decoPlayer = AVPlayer(url: url)
-            decoPlayer?.play()
+            sugaPlay(url)
         } else {
             NepaliSpeaker.say(nepali: w.devanagari, romanized: w.romanized)
         }
@@ -4426,6 +8906,29 @@ struct MyGharView: View {
         poke(item.id)
     }
 
+    /// Put a built upgrade into storage — off the house, free to put back.
+    private func storeUpgrade(_ item: ShopItem) {
+        guard upgradeIDs.contains(item.id) else { return }
+        var ids = upgradeIDs
+        ids.remove(item.id)
+        upgradesData = (try? JSONEncoder().encode(ids)) ?? Data()
+        var stored = storedUpgradeIDs
+        stored.insert(item.id)
+        storedUpgradesData = (try? JSONEncoder().encode(stored)) ?? Data()
+    }
+
+    /// Put a stored upgrade back on the house — free.
+    private func placeUpgrade(_ item: ShopItem) {
+        guard storedUpgradeIDs.contains(item.id) else { return }
+        var stored = storedUpgradeIDs
+        stored.remove(item.id)
+        storedUpgradesData = (try? JSONEncoder().encode(stored)) ?? Data()
+        var ids = upgradeIDs
+        ids.insert(item.id)
+        upgradesData = (try? JSONEncoder().encode(ids)) ?? Data()
+        poke(item.id)
+    }
+
     /// Prove-it prizes: grant every exclusive whose verified-mission
     /// requirement is met. Runs on appear, so prizes land the moment the
     /// grown-up confirms — even if the kid is already on this tab.
@@ -4440,16 +8943,246 @@ struct MyGharView: View {
                 lastWin = "\(item.nameEn) earned! 🏆"
             }
         }
+        for (id, need) in QuizStickers.thresholds where QuizStats.correctTotal >= need && !ids.contains(id) {
+            ids.insert(id)
+            changed = true
+            if let item = exclusiveItems.first(where: { $0.id == id }) {
+                lastWin = "\(item.nameEn) earned! 🏆"
+            }
+        }
         if changed {
             ownedData = (try? JSONEncoder().encode(ids)) ?? Data()
             WinFanfare.play()
         }
     }
 
+    /// Soccer ball: unlocked when ALL teen missions are complete —
+    /// the teen parallel to the dog.
+    private func grantBall() {
+        guard !ownedIDs.contains("goldsoccerball") else { return }
+        guard !TeenMissions.all.isEmpty else { return }
+        let done = TeenMissions.all.filter { completedIDs.contains($0.id) }.count
+        if done >= TeenMissions.all.count {
+            var ids = ownedIDs
+            ids.insert("goldsoccerball")
+            ownedData = (try? JSONEncoder().encode(ids)) ?? Data()
+            lastWin = "⚽ You finished every teen mission! A GOLDEN soccer ball for your Ghar!"
+            QuizDing.play()
+        }
+    }
+
+    /// Dog buddy: unlocked when ALL missions are complete. The ultimate prize.
+    private func grantDog() {
+        guard !ownedIDs.contains("dog") else { return }
+        let totalMissions = pack.missions.count
+        guard totalMissions > 0 else { return }
+        let doneCount = pack.missions.filter { completedIDs.contains($0.id) }.count
+        if doneCount >= totalMissions {
+            var ids = ownedIDs
+            ids.insert("dog")
+            ownedData = (try? JSONEncoder().encode(ids)) ?? Data()
+            lastWin = "🐕 You did every mission! Meet \(dogName)!"
+            WinFanfare.play()
+        }
+    }
+
+    /// Bones ride along with XP: every XP earned anywhere in the app
+    /// also earns a bone. Synced lazily from the shared XP total, so
+    /// every award site (quiz, missions, tracing...) counts without
+    /// being touched. Bones start at 0 the day the dog arrives — XP
+    /// earned before he existed doesn't count. A refund never takes
+    /// bones back.
+    private func syncBones() {
+        guard ownedIDs.contains("dog") else { return }
+        if !bonesInit {
+            bonesSyncedXP = totalXP
+            bonesInit = true
+            return
+        }
+        let delta = totalXP - bonesSyncedXP
+        if delta > 0 { bones += delta }
+        if delta != 0 { bonesSyncedXP = totalXP }
+    }
+
+    private var canLevelUp: Bool {
+        (dogStage == 0 && bones >= 50) || (dogStage == 1 && bones >= 150)
+    }
+
+    private var dogStageName: String {
+        ["Puppy", "Young Dog", "Big Dog"][min(max(dogStage, 0), 2)]
+    }
+
+    private var nextStageName: String {
+        dogStage == 0 ? "Young Dog" : "Big Dog"
+    }
+
+    private var growthProgress: Double {
+        switch dogStage {
+        case 0: return min(Double(bones) / 50.0, 1)
+        case 1: return min(Double(max(bones - 50, 0)) / 100.0, 1)
+        default: return 1
+        }
+    }
+
+    private var growthLabel: String {
+        switch dogStage {
+        case 0: return canLevelUp ? "Ready to grow! 🎉" : "\(50 - bones) 🦴 to Young Dog"
+        case 1: return canLevelUp ? "Ready to grow! 🎉" : "\(150 - bones) 🦴 to Big Dog"
+        default: return "All grown up! 🎉"
+        }
+    }
+
+    /// Level Up: the big moment — bones become growth, with fanfare.
+    private func levelUpDog() {
+        guard canLevelUp else { return }
+        dogStage += 1
+        lastWin = "🎉 \(dogName) grew into a \(dogStageName)!"
+        WinFanfare.play()
+        dogTalk()
+    }
+
+    /// Pet the dog: press and hold for tail wags. Pure joy, no XP.
+    private func petDog() {
+        petting = true
+        dogTalk()
+        // Happy bark via TTS-friendly sound — using system sound for now.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+            petting = false
+        }
+    }
+
+    /// The dog speaks: real bark sound, not TTS.
+    private func dogTalk() {
+        let barkFile = dogStage == 0 ? "dog_bark" : "dog_bark_big"
+        let urlString = GharAPI.baseURLString + "/audio/nepal-v1/\(barkFile).m4a"
+        if let url = URL(string: urlString) {
+            decoPlayer?.pause()
+            decoPlayer = AVPlayer(url: url)
+            decoPlayer?.play()
+        }
+    }
+
+    /// Teach the dog a trick: save the trick name. The dog "does" it on tap.
+    private func saveTrick() {
+        let name = trickName.trimmingCharacters(in: .whitespaces)
+        guard !name.isEmpty else { return }
+        var tricks = dogTricks
+        tricks.append(name)
+        dogTricksData = (try? JSONEncoder().encode(tricks)) ?? Data()
+        trickName = ""
+        teachingTrick = false
+        lastWin = "🐕 \(dogName) learned \"\(name)\"!"
+        WinFanfare.play()
+    }
+
+    private var dogTricks: [String] {
+        (try? JSONDecoder().decode([String].self, from: dogTricksData)) ?? []
+    }
+
+    /// Fetch: the ball flies out, the dog RUNS to it, grabs it,
+    /// and carries it back. +2 XP, max 10/day.
+    private func playFetch() {
+        let today = Streak.todayString
+        // Reset daily count if it's a new day.
+        if lastFetchDate != today {
+            fetchCount = 0
+            lastFetchDate = today
+        }
+        guard fetchCount < 5 else { return } // 5 throws × 2 XP = 10 XP/day max
+        guard !fetching else { return }
+        fetching = true
+        fetchCount += 1
+        totalXP += 2
+        let home = dogRoamX // wherever the dog happens to be
+        // Ball flies out.
+        fetchBallVisible = true
+        fetchBallX = 0
+        withAnimation(.easeOut(duration: 0.5)) { fetchBallX = 80 }
+        // Dog runs to the ball...
+        dogFacingRight = true
+        dogPose = .walking
+        withAnimation(.easeInOut(duration: 0.9)) { dogRoamX = home + 80 }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+            // ...grabs it (ball vanishes into mouth)...
+            self.dogCarryingBall = true
+            self.fetchBallVisible = false
+            // ...and carries it home.
+            self.dogFacingRight = false
+            withAnimation(.easeInOut(duration: 0.9)) { self.dogRoamX = home }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+            self.dogCarryingBall = false
+            self.dogPose = .idle
+            self.dogFacingRight = true
+            self.fetching = false
+            self.dogTalk() // proud bark!
+        }
+    }
+
+    /// Perform a trick: the dog actually DOES it.
+    /// "bas"/"sit" → real sitting pose. "ghum"/"spin" → full spin.
+    /// Anything else → happy hop.
+    private func performTrick(_ trick: String) {
+        let lower = trick.lowercased()
+        if lower.contains("bas") || lower.contains("sit") {
+            dogPose = .sitting
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) {
+                if self.dogPose == .sitting { self.dogPose = .idle }
+            }
+        } else if lower.contains("ghum") || lower.contains("spin") {
+            withAnimation(.easeInOut(duration: 0.7)) { dogSpinDegrees += 360 }
+        } else {
+            // Happy hop for any other trick.
+            withAnimation(.spring(response: 0.35, dampingFraction: 0.4)) { dogBounce = 1.0 }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                withAnimation(.spring(response: 0.35)) { self.dogBounce = 0.0 }
+            }
+        }
+        dogTalk()
+    }
+
+    // MARK: - Living-dog timers
+
+    /// Starts the animation clocks: tail wag + walk cycle + blinks,
+    /// plus a roam timer so the dog wanders the yard on its own.
+    private func startDogTimers() {
+        stopDogTimers()
+        dogTimer = Timer.scheduledTimer(withTimeInterval: 0.06, repeats: true) { _ in
+            dogWagPhase += 0.35
+            if dogPose == .walking { dogWalkPhase += 0.5 }
+            // Random blink.
+            if Int.random(in: 0..<70) == 0 {
+                dogBlinking = true
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                    dogBlinking = false
+                }
+            }
+        }
+        dogRoamTimer = Timer.scheduledTimer(withTimeInterval: 9, repeats: true) { _ in
+            guard ownedIDs.contains("dog"), dogPose == .idle, !fetching else { return }
+            let target = CGFloat.random(in: -70...30)
+            dogFacingRight = target > dogRoamX
+            dogPose = .walking
+            withAnimation(.easeInOut(duration: 1.4)) { dogRoamX = target }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                if !fetching && dogPose == .walking { dogPose = .idle }
+            }
+        }
+    }
+
+    private func stopDogTimers() {
+        dogTimer?.invalidate()
+        dogTimer = nil
+        dogRoamTimer?.invalidate()
+        dogRoamTimer = nil
+    }
+
     /// Set bonuses: own every item in a set, pocket the bonus — once ever.
     /// Also runs on appear, so sets completed before this update pay out
     /// as a welcome-back surprise instead of being missed.
-    private func checkSets() {
+    /// Awards set-completion bonuses. `silent` (purchases) skips the
+    /// praise fanfare — buying speaks the item's name and nothing else.
+    private func checkSets(silent: Bool = false) {
         var awarded = awardedSets
         var changed = false
         for set in decoSets where !awarded.contains(set.id) {
@@ -4462,7 +9195,7 @@ struct MyGharView: View {
         }
         if changed {
             awardedSetsData = (try? JSONEncoder().encode(awarded)) ?? Data()
-            WinFanfare.play()
+            if !silent { WinFanfare.play() }
         }
     }
 
@@ -4512,17 +9245,89 @@ struct MyGharView: View {
     /// A yard decoration: its watercolor illustration once landed on the
     /// backend, emoji while it loads. Callers wrap it in
     /// `if ownedIDs.contains(...)` and position it.
+    /// A small dog-growth icon for the progress bar.
+    private func growthIcon(_ name: String, size: CGFloat) -> some View {
+        Group {
+            if let img = myGharSprite(name) {
+                img.resizable().scaledToFit()
+            } else {
+                Text("🐕").font(.system(size: size * 0.7))
+            }
+        }
+        .frame(width: size, height: size)
+    }
+
+    /// Trophy shelf captions for prizes not yet earned.
+    private func teenHint(_ id: String) -> String {
+        switch id {
+        case "goldsoccerball": return "All 8 teen missions"
+        case "headphones": return "Finish the Texting deck"
+        case "skateboard": return "Finish the Slang deck"
+        case "sunglasses": return "Finish the Comebacks deck"
+        case "camera": return "Finish the Captions deck"
+        case "guitar": return "Finish the Lyrics deck"
+        default: return "Teen mystery prize"
+        }
+    }
+
+    private func trophyHint(_ id: String) -> String {
+        switch id {
+        case "goldenDiyo": return "1 verified mission"
+        case "starBadge": return "3 verified missions"
+        case "mukut": return "5 verified missions"
+        case "flameDiyo": return "7-day streak"
+        case "streakCrown": return "15-day streak"
+        case "quiz50": return "50 quiz answers right"
+        case "quiz100": return "100 quiz answers right"
+        case "quiz250": return "250 quiz answers right"
+        case "quiz500": return "500 quiz answers right"
+        default: return "Keep going!"
+        }
+    }
+
+    /// Prayer flags across the top of the room: real garland art,
+    /// greyed until bought, rippling forever once they fly.
+    private var flagsOverlay: some View {
+        Group {
+            if let img = myGharSprite("flags") {
+                img.resizable().scaledToFit()
+            } else {
+                HStack(spacing: 6) {
+                    ForEach(0..<7, id: \.self) { i in
+                        Triangle()
+                            .fill(ownedIDs.contains("flags") ? flagColors[i % flagColors.count] : .gray.opacity(0.25))
+                            .frame(width: 24, height: 20)
+                    }
+                }
+            }
+        }
+        .frame(width: 252 * stageK, height: 54 * stageK)
+        .grayscale(ownedIDs.contains("flags") ? 0 : 1)
+        .opacity(ownedIDs.contains("flags") ? 1 : 0.4)
+        .rotationEffect(.degrees((poppedID == "flags" ? 8 : 0) + (flagWave ? 2.5 : -2.5)))
+        .onAppear {
+            withAnimation(.easeInOut(duration: 1.6).repeatForever(autoreverses: true)) {
+                flagWave = true
+            }
+        }
+        .onTapGesture {
+            if ownedIDs.contains("flags") {
+                sayDecoration(shopItem("flags"))
+                poke("flags")
+            }
+        }
+    }
+
     private func deco(_ id: String, size: CGFloat) -> some View {
-        AsyncImage(url: URL(string: GharAPI.baseURLString + "/images/nepal-v1/deco_\(id).jpg")) { phase in
-            switch phase {
-            case .success(let image):
-                image.resizable().scaledToFit()
-            default:
+        Group {
+            if let img = myGharSprite(id) {
+                img.resizable().scaledToFit()
+            } else {
                 Text(shopItem(id).icon)
                     .font(.system(size: size))
             }
         }
-        .frame(width: size, height: size)
+        .frame(width: size * stageK, height: size * stageK)
         .scaleEffect(poppedID == id ? 1.3 : 1.0)
         .onTapGesture {
             sayDecoration(shopItem(id))
@@ -4533,14 +9338,10 @@ struct MyGharView: View {
     /// Shop row icon: the watercolor illustration (Suga uses his parrot
     /// portrait), falling back to emoji while it loads.
     private func shopIcon(_ item: ShopItem, size: CGFloat = 44) -> some View {
-        let path = item.id == "buddy"
-            ? "/images/nepal-v1/suga_parrot.jpg"
-            : "/images/nepal-v1/deco_\(item.id).jpg"
-        return AsyncImage(url: URL(string: GharAPI.baseURLString + path)) { phase in
-            switch phase {
-            case .success(let image):
-                image.resizable().scaledToFit()
-            default:
+        Group {
+            if let img = myGharSprite(item.id == "buddy" ? "suga" : item.id) {
+                img.resizable().scaledToFit()
+            } else {
                 Text(item.icon)
                     .font(.title2)
             }
@@ -4556,22 +9357,21 @@ struct MyGharView: View {
             if ownedIDs.contains("himal") {
                 // The watercolor range — snow glistens on the peaks.
                 ZStack {
-                    AsyncImage(url: URL(string: GharAPI.baseURLString + "/images/nepal-v1/deco_himalayas.jpg")) { phase in
-                        switch phase {
-                        case .success(let image):
-                            image.resizable().scaledToFit()
-                        default:
+                    Group {
+                        if let img = myGharSprite("himal") {
+                            img.resizable().scaledToFit()
+                        } else {
                             Triangle()
                                 .fill(.indigo.opacity(0.3))
                                 .frame(width: 80, height: 55)
                         }
                     }
-                    .frame(width: 150, height: 75)
+                    .frame(width: 66 * stageK, height: 70 * stageK)
                     ForEach(0..<4, id: \.self) { i in
                         Circle()
                             .fill(.white)
                             .frame(width: 4, height: 4)
-                            .offset(x: [-35, -12, 12, 32][i], y: [-25, -30, -27, -20][i])
+                            .offset(x: [-18, -6, 8, 20][i], y: [-22, -26, -24, -18][i])
                             .opacity(snowTwinkle ? 0.95 : 0.25)
                             .animation(
                                 .easeInOut(duration: 1.2)
@@ -4581,7 +9381,7 @@ struct MyGharView: View {
                             )
                     }
                 }
-                .offset(placedOffset("himal", x: 80, y: -138))
+                .offset(placedOffset("himal", x: -3, y: -139))
                 .arrange("himal", enabled: arranging, dragDeltas: $dragDeltas, commit: commitDrag)
                 .scaleEffect(poppedID == "himal" ? 1.05 : 1.0)
                 .onAppear { snowTwinkle = true }
@@ -4618,104 +9418,117 @@ struct MyGharView: View {
     private var sceneDeco: some View {
         Group {
             if ownedIDs.contains("changa") {
-                deco("changa", size: 34)
-                    .offset(placedOffset("changa", x: 105, y: -135))
+                deco("changa", size: 40)
+                    .offset(placedOffset("changa", x: 102, y: -128))
                     .arrange("changa", enabled: arranging, dragDeltas: $dragDeltas, commit: commitDrag)
             }
             if ownedIDs.contains("mandir") {
-                deco("mandir", size: 40)
-                    .offset(placedOffset("mandir", x: -128, y: 95))
+                deco("mandir", size: 46)
+                    .offset(placedOffset("mandir", x: -106, y: -24))
                     .arrange("mandir", enabled: arranging, dragDeltas: $dragDeltas, commit: commitDrag)
             }
             if ownedIDs.contains("tulsi") {
-                deco("tulsi", size: 32)
-                    .offset(placedOffset("tulsi", x: -125, y: 160))
+                deco("tulsi", size: 46)
+                    .offset(placedOffset("tulsi", x: 97, y: -30))
                     .arrange("tulsi", enabled: arranging, dragDeltas: $dragDeltas, commit: commitDrag)
             }
             if ownedIDs.contains("jamara") {
-                deco("jamara", size: 28)
-                    .offset(placedOffset("jamara", x: -88, y: 172))
+                deco("jamara", size: 38)
+                    .offset(placedOffset("jamara", x: -76, y: 166))
                     .arrange("jamara", enabled: arranging, dragDeltas: $dragDeltas, commit: commitDrag)
             }
             if ownedIDs.contains("sayapatri") {
-                deco("sayapatri", size: 28)
-                    .offset(placedOffset("sayapatri", x: 88, y: 172))
+                deco("sayapatri", size: 42)
+                    .offset(placedOffset("sayapatri", x: 94, y: 164))
                     .arrange("sayapatri", enabled: arranging, dragDeltas: $dragDeltas, commit: commitDrag)
             }
-            if ownedIDs.contains("kukur") {
-                deco("kukur", size: 34)
-                    .offset(placedOffset("kukur", x: 125, y: 158))
-                    .arrange("kukur", enabled: arranging, dragDeltas: $dragDeltas, commit: commitDrag)
+            if ownedIDs.contains("goldsoccerball") {
+                deco("goldsoccerball", size: 40)
+                    .offset(placedOffset("goldsoccerball", x: 34, y: 156))
+                    .arrange("goldsoccerball", enabled: arranging, dragDeltas: $dragDeltas, commit: commitDrag)
+            }
+            if ownedIDs.contains("guitar") {
+                deco("guitar", size: 46)
+                    .offset(placedOffset("guitar", x: -46, y: 148))
+                    .arrange("guitar", enabled: arranging, dragDeltas: $dragDeltas, commit: commitDrag)
+            }
+            if ownedIDs.contains("sneakers") {
+                deco("sneakers", size: 38)
+                    .offset(placedOffset("sneakers", x: 64, y: 136))
+                    .arrange("sneakers", enabled: arranging, dragDeltas: $dragDeltas, commit: commitDrag)
+            }
+            if ownedIDs.contains("skateboard") {
+                deco("skateboard", size: 48)
+                    .offset(placedOffset("skateboard", x: 130, y: 170))
+                    .arrange("skateboard", enabled: arranging, dragDeltas: $dragDeltas, commit: commitDrag)
+            }
+            if ownedIDs.contains("headphones") {
+                deco("headphones", size: 36)
+                    .offset(placedOffset("headphones", x: -110, y: 150))
+                    .arrange("headphones", enabled: arranging, dragDeltas: $dragDeltas, commit: commitDrag)
+            }
+            if ownedIDs.contains("sunglasses") {
+                deco("sunglasses", size: 34)
+                    .offset(placedOffset("sunglasses", x: 104, y: 128))
+                    .arrange("sunglasses", enabled: arranging, dragDeltas: $dragDeltas, commit: commitDrag)
+            }
+            if ownedIDs.contains("camera") {
+                deco("camera", size: 36)
+                    .offset(placedOffset("camera", x: -8, y: 168))
+                    .arrange("camera", enabled: arranging, dragDeltas: $dragDeltas, commit: commitDrag)
+            }
+            if ownedIDs.contains("basketball") {
+                deco("basketball", size: 38)
+                    .offset(placedOffset("basketball", x: 78, y: 158))
+                    .arrange("basketball", enabled: arranging, dragDeltas: $dragDeltas, commit: commitDrag)
+            }
+            if ownedIDs.contains("controller") {
+                deco("controller", size: 38)
+                    .offset(placedOffset("controller", x: -84, y: 118))
+                    .arrange("controller", enabled: arranging, dragDeltas: $dragDeltas, commit: commitDrag)
+            }
+            // Mystery Box treasures: winnable for ages, but they had
+            // NO room blocks — owned, yet nowhere to live in the
+            // house (Som's report, 2026-10-23). Now they render and
+            // arrange like every other decoration.
+            if ownedIDs.contains("guleyli") {
+                deco("guleyli", size: 36)
+                    .offset(placedOffset("guleyli", x: -128, y: 96))
+                    .arrange("guleyli", enabled: arranging, dragDeltas: $dragDeltas, commit: commitDrag)
+            }
+            if ownedIDs.contains("nanglo") {
+                deco("nanglo", size: 44)
+                    .offset(placedOffset("nanglo", x: -60, y: 176))
+                    .arrange("nanglo", enabled: arranging, dragDeltas: $dragDeltas, commit: commitDrag)
+            }
+            if ownedIDs.contains("charkha") {
+                deco("charkha", size: 46)
+                    .offset(placedOffset("charkha", x: 140, y: 96))
+                    .arrange("charkha", enabled: arranging, dragDeltas: $dragDeltas, commit: commitDrag)
+            }
+            if ownedIDs.contains("khukuri") {
+                deco("khukuri", size: 40)
+                    .offset(placedOffset("khukuri", x: -140, y: -8))
+                    .arrange("khukuri", enabled: arranging, dragDeltas: $dragDeltas, commit: commitDrag)
+            }
+            if ownedIDs.contains("sarangi") {
+                deco("sarangi", size: 44)
+                    .offset(placedOffset("sarangi", x: 146, y: 30))
+                    .arrange("sarangi", enabled: arranging, dragDeltas: $dragDeltas, commit: commitDrag)
+            }
+            if ownedIDs.contains("karuwa") {
+                deco("karuwa", size: 36)
+                    .offset(placedOffset("karuwa", x: -96, y: 168))
+                    .arrange("karuwa", enabled: arranging, dragDeltas: $dragDeltas, commit: commitDrag)
             }
             if ownedIDs.contains("rangoli") {
                 rangoli
-                    .offset(placedOffset("rangoli", x: 0, y: 172))
+                    .offset(placedOffset("rangoli", x: -8, y: 16))
                     .arrange("rangoli", enabled: arranging, dragDeltas: $dragDeltas, commit: commitDrag)
                     .scaleEffect(poppedID == "rangoli" ? 1.2 : 1.0)
                     .onTapGesture {
                         sayDecoration(shopItem("rangoli"))
                         poke("rangoli")
-                    }
-            }
-            // Flower garden: the watercolor bed, swaying gently.
-            // Tap to hear "phulbari".
-            if upgradeIDs.contains("garden") {
-                AsyncImage(url: URL(string: GharAPI.baseURLString + "/images/nepal-v1/deco_garden.jpg")) { phase in
-                    switch phase {
-                    case .success(let image):
-                        image.resizable().scaledToFit()
-                    default:
-                        Text("🌸").font(.system(size: 40))
-                    }
-                }
-                .frame(width: 76, height: 76)
-                .rotationEffect(.degrees(flowerSway ? 2 : -2))
-                .onAppear {
-                    withAnimation(.easeInOut(duration: 2.4).repeatForever(autoreverses: true)) {
-                        flowerSway = true
-                    }
-                }
-                .offset(placedOffset("garden", x: -48, y: 162))
-                .arrange("garden", enabled: arranging, dragDeltas: $dragDeltas, commit: commitDrag)
-                .scaleEffect(poppedID == "garden" ? 1.2 : 1.0)
-                .onTapGesture {
-                    sayDecoration(id: "garden", nepali: "फूलबारी", romanized: "phulbari")
-                    poke("garden")
-                }
-            }
-            // Chautari: the classic Nepali rest-stop tree on its stone
-            // platform. Tap to hear "chautari".
-            if upgradeIDs.contains("chautari") {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 6)
-                        .fill(Color(red: 0.55, green: 0.55, blue: 0.58))
-                        .frame(width: 76, height: 20)
-                        .offset(y: 34)
-                    RoundedRectangle(cornerRadius: 4)
-                        .fill(Color(red: 0.4, green: 0.28, blue: 0.15))
-                        .frame(width: 14, height: 44)
-                        .offset(y: 4)
-                    Circle().fill(.green.opacity(0.9)).frame(width: 64, height: 64).offset(y: -30)
-                    Circle().fill(Color(red: 0.2, green: 0.55, blue: 0.25)).frame(width: 44, height: 44).offset(x: -20, y: -22)
-                    Circle().fill(Color(red: 0.25, green: 0.6, blue: 0.3)).frame(width: 40, height: 40).offset(x: 20, y: -24)
-                }
-                .offset(placedOffset("chautari", x: 52, y: 122))
-                .arrange("chautari", enabled: arranging, dragDeltas: $dragDeltas, commit: commitDrag)
-                .scaleEffect(poppedID == "chautari" ? 1.15 : 1.0)
-                .onTapGesture {
-                    sayDecoration(id: "chautari", nepali: "चौतारी", romanized: "chautari")
-                    poke("chautari")
-                }
-            }
-            // A butterfly loops over the garden forever — the yard breathes.
-            if upgradeIDs.contains("garden") {
-                Text("🦋")
-                    .font(.system(size: 22))
-                    .offset(x: butterflyFly ? 40 : -110, y: butterflyFly ? 128 : 150)
-                    .onAppear {
-                        withAnimation(.easeInOut(duration: 6).repeatForever(autoreverses: true)) {
-                            butterflyFly = true
-                        }
                     }
             }
         }
@@ -4726,21 +9539,21 @@ struct MyGharView: View {
     private var bodyDeco: some View {
         Group {
             if ownedIDs.contains("mala") {
-                deco("mala", size: 26)
-                    .offset(placedOffset("mala", x: 0, y: -14))
+                deco("mala", size: 58)
+                    .offset(placedOffset("mala", x: -104, y: -132))
                     .arrange("mala", enabled: arranging, dragDeltas: $dragDeltas, commit: commitDrag)
             }
             if ownedIDs.contains("ghanta") {
                 VStack(spacing: 0) {
                     Rectangle().fill(.gray).frame(width: 4, height: 22)
-                    deco("ghanta", size: 30)
+                    deco("ghanta", size: 34)
                 }
-                .offset(placedOffset("ghanta", x: 100, y: -58))
+                .offset(placedOffset("ghanta", x: 104, y: -52))
                 .arrange("ghanta", enabled: arranging, dragDeltas: $dragDeltas, commit: commitDrag)
             }
             if ownedIDs.contains("goldenDiyo") {
                 goldenDiyo
-                    .offset(placedOffset("goldenDiyo", x: -100, y: 52))
+                    .offset(placedOffset("goldenDiyo", x: -107, y: -92))
                     .arrange("goldenDiyo", enabled: arranging, dragDeltas: $dragDeltas, commit: commitDrag)
                     .scaleEffect(poppedID == "goldenDiyo" ? 1.3 : 1.0)
                     .onTapGesture {
@@ -4749,14 +9562,36 @@ struct MyGharView: View {
                     }
             }
             if ownedIDs.contains("starBadge") {
-                deco("starBadge", size: 28)
-                    .offset(placedOffset("starBadge", x: 0, y: -60))
+                deco("starBadge", size: 34)
+                    .offset(placedOffset("starBadge", x: -64, y: -18))
                     .arrange("starBadge", enabled: arranging, dragDeltas: $dragDeltas, commit: commitDrag)
             }
             if ownedIDs.contains("mukut") {
-                deco("mukut", size: 24)
-                    .offset(placedOffset("mukut", x: 80, y: 18))
+                deco("mukut", size: 36)
+                    .offset(placedOffset("mukut", x: -72, y: 42))
                     .arrange("mukut", enabled: arranging, dragDeltas: $dragDeltas, commit: commitDrag)
+            }
+            // Quiz stickers: a row along the wall under the rangoli
+            // as the kid earns them.
+            if ownedIDs.contains("quiz50") {
+                deco("quiz50", size: 24)
+                    .offset(placedOffset("quiz50", x: -138, y: -128))
+                    .arrange("quiz50", enabled: arranging, dragDeltas: $dragDeltas, commit: commitDrag)
+            }
+            if ownedIDs.contains("quiz100") {
+                deco("quiz100", size: 24)
+                    .offset(placedOffset("quiz100", x: -114, y: -128))
+                    .arrange("quiz100", enabled: arranging, dragDeltas: $dragDeltas, commit: commitDrag)
+            }
+            if ownedIDs.contains("quiz250") {
+                deco("quiz250", size: 24)
+                    .offset(placedOffset("quiz250", x: -90, y: -128))
+                    .arrange("quiz250", enabled: arranging, dragDeltas: $dragDeltas, commit: commitDrag)
+            }
+            if ownedIDs.contains("quiz500") {
+                deco("quiz500", size: 24)
+                    .offset(placedOffset("quiz500", x: -66, y: -128))
+                    .arrange("quiz500", enabled: arranging, dragDeltas: $dragDeltas, commit: commitDrag)
             }
         }
     }
@@ -4797,21 +9632,16 @@ struct MyGharView: View {
             if ownedIDs.contains("diyo") {
                 Circle()
                     .fill(.orange.opacity(0.3))
-                    .frame(width: 64, height: 64)
+                    .frame(width: 64 * stageK, height: 64 * stageK)
                     .blur(radius: 12)
-                AsyncImage(url: URL(string: GharAPI.baseURLString + "/images/nepal-v1/deco_diyo.jpg")) { phase in
-                    switch phase {
-                    case .success(let image):
-                        image.resizable().scaledToFit()
-                    default:
-                        VStack(spacing: 1) {
-                            Circle().fill(.orange).frame(width: 14, height: 14)
-                            Ellipse().fill(.brown).frame(width: 30, height: 12)
-                        }
+                Group {
+                    if let img = myGharSprite("diyo") {
+                        img.resizable().scaledToFit()
+                    } else {
+                        Text("🪔").font(.system(size: 34))
                     }
                 }
-                .frame(width: 46, height: 46)
-                .clipShape(RoundedRectangle(cornerRadius: 10))
+                .frame(width: 50 * stageK, height: 50 * stageK)
                 .scaleEffect(flameFlicker ? 1.06 : 0.97)
                 .onAppear {
                     withAnimation(.easeInOut(duration: 1.4).repeatForever(autoreverses: true)) {
@@ -4819,10 +9649,16 @@ struct MyGharView: View {
                     }
                 }
             } else {
-                VStack(spacing: 1) {
-                    Circle().fill(.gray.opacity(0.25)).frame(width: 14, height: 14)
-                    Ellipse().fill(.gray.opacity(0.25)).frame(width: 30, height: 12)
+                Group {
+                    if let img = myGharSprite("diyo") {
+                        img.resizable().scaledToFit()
+                    } else {
+                        Text("🪔").font(.system(size: 34))
+                    }
                 }
+                .frame(width: 50 * stageK, height: 50 * stageK)
+                .grayscale(1)
+                .opacity(0.35)
             }
         }
     }
@@ -4833,32 +9669,34 @@ struct MyGharView: View {
         ZStack {
             Circle()
                 .fill(.yellow.opacity(0.35))
-                .frame(width: 56, height: 56)
+                .frame(width: 56 * stageK, height: 56 * stageK)
                 .blur(radius: 10)
-            AsyncImage(url: URL(string: GharAPI.baseURLString + "/images/nepal-v1/deco_goldenDiyo.jpg")) { phase in
-                switch phase {
-                case .success(let image):
-                    image.resizable().scaledToFit()
-                default:
-                    Ellipse()
-                        .fill(Color(red: 0.85, green: 0.65, blue: 0.13))
-                        .frame(width: 32, height: 13)
+            Group {
+                if let img = myGharSprite("goldenDiyo") {
+                    img.resizable().scaledToFit()
+                } else {
+                    Text("🪔").font(.system(size: 30))
                 }
             }
-            .frame(width: 42, height: 42)
-            .clipShape(RoundedRectangle(cornerRadius: 10))
+            .frame(width: 46 * stageK, height: 46 * stageK)
             .scaleEffect(flameFlicker ? 1.06 : 0.97)
         }
     }
 
-    /// A rangoli: concentric colored circles at the doorstep, drawn not bought
-    /// as emoji — there's no good rangoli emoji, and circles are prettier.
+    /// A rangoli: concentric colored circles hung on the wall like a
+    /// medallion — there's no good rangoli emoji, and circles are prettier.
     private var rangoli: some View {
-        ZStack {
-            Circle().fill(.red).frame(width: 46, height: 46)
-            Circle().fill(.orange).frame(width: 34, height: 34)
-            Circle().fill(.yellow).frame(width: 22, height: 22)
-            Circle().fill(.pink).frame(width: 10, height: 10)
+        Group {
+            if let img = myGharSprite("rangoli") {
+                img.resizable().scaledToFit().frame(width: 46 * stageK, height: 46 * stageK)
+            } else {
+                ZStack {
+                    Circle().fill(.red).frame(width: 46, height: 46)
+                    Circle().fill(.orange).frame(width: 34, height: 34)
+                    Circle().fill(.yellow).frame(width: 22, height: 22)
+                    Circle().fill(.pink).frame(width: 10, height: 10)
+                }
+            }
         }
     }
 
@@ -4870,30 +9708,35 @@ struct MyGharView: View {
         let owned = ownedIDs.contains("buddy")
         return ZStack {
             if owned {
-                AsyncImage(url: URL(string: GharAPI.baseURLString + "/images/nepal-v1/suga_parrot.jpg")) { phase in
-                    switch phase {
-                    case .success(let image):
-                        image.resizable().scaledToFill()
-                    default:
+                // His own perch stand; Suga bobs on top of it.
+                if let stand = myGharSprite("suga_stand") {
+                    stand.resizable().scaledToFit()
+                        .frame(width: 92 * stageK, height: 118 * stageK)
+                }
+                Group {
+                    if let img = myGharSprite("suga") {
+                        img.resizable().scaledToFit()
+                    } else {
                         buddyDrawn
                     }
                 }
-                .frame(width: 84, height: 84)
-                .clipShape(Circle())
-                .overlay(Circle().stroke(.green.opacity(0.35), lineWidth: 3))
-                .shadow(radius: 3)
-                .offset(y: buddyBob ? -4 : 4)
+                .frame(width: 62 * stageK, height: 75 * stageK)
+                .offset(y: (-71 + (buddyBob ? -3 : 3)) * stageK)
+                .scaleEffect(poppedID == "buddy" ? 1.18 : 1.0)
                 .onAppear {
                     withAnimation(.easeInOut(duration: 1.6).repeatForever(autoreverses: true)) {
                         buddyBob = true
                     }
                 }
+                // His name, painted on the front of the stand's base —
+                // same lettering as the dog's wooden sign.
                 Text(buddyDisplayName)
-                    .font(.caption2).bold()
-                    .padding(.horizontal, 6).padding(.vertical, 2)
-                    .background(.white.opacity(0.9))
-                    .clipShape(Capsule())
-                    .offset(y: 54)
+                    .font(.system(size: 13 * stageK, weight: .bold, design: .rounded))
+                    .foregroundStyle(Color(red: 0.36, green: 0.22, blue: 0.08))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.5)
+                    .frame(width: 74 * stageK)
+                    .offset(y: 42 * stageK)
             } else {
                 Circle()
                     .fill(.gray.opacity(0.25))
@@ -5073,13 +9916,72 @@ enum NepaliSpeaker {
 /// - `@State private var player` keeps the player alive while the sound
 ///   plays. Without this, SwiftUI would throw it away mid-word and you'd
 ///   hear nothing (a classic beginner bug — now you know it).
+/// Lesson tour steps (Som's idea, 2026-10-20): point a new kid at the
+/// three buttons that matter in a deck — hear it, write it, say it.
+enum LessonTourStep: CaseIterable {
+    case listen, write, speak
+}
+
+/// One tour stop: Som's line in Nepali, big, with his voice playing
+/// (the clips ship in the pack audio as tour_<step>_np.m4a).
+struct LessonTourBanner: View {
+    let step: LessonTourStep
+    let isLast: Bool
+    let onNext: () -> Void
+    let onSkip: () -> Void
+
+    private var emoji: String {
+        switch step {
+        case .listen: return "🔊"
+        case .write: return "✍️"
+        case .speak: return "🎤"
+        }
+    }
+    private var nepali: String {
+        switch step {
+        case .listen: return "यहाँ थिचेर सुन्नुस!"
+        case .write: return "यहाँबाट लेख्न सिक्नुस!"
+        case .speak: return "यहाँ थिचेर बोल्न सिक्नुस!"
+        }
+    }
+    private var english: String {
+        switch step {
+        case .listen: return "Tap the speaker button to hear the word"
+        case .write: return "Learn to write from here"
+        case .speak: return "Tap the microphone to practice speaking"
+        }
+    }
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Text(emoji).font(.system(size: 40))
+            VStack(alignment: .leading, spacing: 2) {
+                Text(nepali).font(.title3).bold()
+                Text(english).font(.subheadline).foregroundStyle(.secondary)
+            }
+            Spacer()
+            Button(isLast ? "Done ✓" : "Next ➜", action: onNext)
+                .buttonStyle(.borderedProminent)
+            Button(action: onSkip) {
+                Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.vertical, 6)
+    }
+}
+
 struct DeckView: View {
     let deck: Deck
     @State private var player: AVPlayer?
-    /// Which section headers are expanded. Starts empty = all collapsed.
-    /// (Som asked: Vowels / Consonants should be tappable to open,
-    /// not both listed at once.)
-    @State private var openSections: Set<String> = []
+    @AppStorage("ghar.premium.unlocked") private var isUnlocked = false
+    @State private var showingPaywall = false
+    @State private var showingWriting = false
+    @State private var tourStep: LessonTourStep? = nil
+    @State private var tourPlayer: AVPlayer?
+    // Lesson tour: first time EVER only (Som's call, 2026-10-22 — it
+    // used to re-run on every app launch, which got old fast).
+    @AppStorage("ghar.lessonTour.done") private var lessonTourDone = false
 
     /// Words grouped under their `section` header, in file order.
     /// (`section` is how Vowels and Consonants live inside one Alphabets deck.)
@@ -5100,71 +10002,240 @@ struct DeckView: View {
         return groups
     }
 
+    @AppStorage("ghar.traced.words") private var tracedData = Data()
+    @AppStorage("ghar.giftbox.opened") private var giftBoxData = Data()
+    @State private var showingGiftBox = false
+
+    private var tracedIDs: Set<String> {
+        (try? JSONDecoder().decode(Set<String>.self, from: tracedData)) ?? Set<String>()
+    }
+    private var giftBoxOpenedIDs: Set<String> {
+        (try? JSONDecoder().decode(Set<String>.self, from: giftBoxData)) ?? Set<String>()
+    }
+    /// True when every traceable word in this deck is done.
+    private var traceDeckComplete: Bool {
+        let traceIDs = deck.words.filter { $0.tracePoints != nil }.map(\.id)
+        return !traceIDs.isEmpty && traceIDs.allSatisfy({ tracedIDs.contains($0) })
+    }
+
+    /// The mystery box banner: teaser while working, tappable claim when
+    /// the deck is done (covers kids who finished before this feature),
+    /// quiet once claimed.
+    @ViewBuilder
+    private var mysteryBoxBanner: some View {
+        let traceWords = deck.words.filter { $0.tracePoints != nil }
+        let tracedCount = traceWords.filter { tracedIDs.contains($0.id) }.count
+        if giftBoxOpenedIDs.contains(deck.id) {
+            HStack(spacing: 12) {
+                Text("🎁").font(.largeTitle)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Mystery box claimed!").font(.headline)
+                    Text("Nice work finishing every tracing")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .padding(.vertical, 6)
+        } else if traceDeckComplete {
+            Button(action: { showingGiftBox = true }) {
+                HStack(spacing: 12) {
+                    Text("🎁").font(.largeTitle)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Mystery box ready!").font(.headline)
+                        Text("You traced every word — tap to open your gift")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .foregroundStyle(.tertiary)
+                }
+                .padding(.vertical, 6)
+            }
+            .buttonStyle(.plain)
+            .sheet(isPresented: $showingGiftBox) {
+                GiftBoxView(deckID: deck.id)
+            }
+        } else {
+            HStack(spacing: 12) {
+                Text("🎁").font(.largeTitle)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Mystery box!").font(.headline)
+                    Text("Trace every word below to earn a mystery gift box (\(tracedCount)/\(traceWords.count) done)")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .padding(.vertical, 6)
+        }
+    }
+
     var body: some View {
         List {
+            // Lesson tour banner: first writing deck of the launch.
+            if let step = tourStep {
+                Section {
+                    LessonTourBanner(step: step,
+                                     isLast: step == tourSteps.last,
+                                     onNext: advanceTour,
+                                     onSkip: { tourStep = nil })
+                }
+            }
+            // Mystery box teaser: only on decks with trace-the-picture words.
+            if deck.words.contains(where: { $0.tracePoints != nil }) {
+                Section {
+                    mysteryBoxBanner
+                }
+            }
             if deck.id == "alphabet" {
                 // Learn to WRITE the letters, not just read them.
-                Section {
-                    NavigationLink {
-                        WritingPracticeView(deck: deck)
+                // Mystery box teaser: trace every letter to unlock the gift!
+                Section(header: Text("👇 🎁 Trace every letter to unlock the mystery box! 🎁 👇").font(.subheadline).bold()) {
+                    Button {
+                        if isUnlocked { showingWriting = true }
+                        else { showingPaywall = true }
                     } label: {
                         HStack(spacing: 14) {
                             Text("✍️").font(.largeTitle)
                             VStack(alignment: .leading, spacing: 2) {
-                                Text("Practice writing").font(.headline)
+                                HStack(spacing: 6) {
+                                    Text("Practice writing").font(.headline)
+                                    Text("🎁").font(.headline)
+                                }
                                 Text("Watch, trace, and write each letter")
                                     .font(.subheadline)
                                     .foregroundStyle(.secondary)
                             }
                             Spacer()
-                            Image(systemName: "chevron.right")
-                                .foregroundStyle(.tertiary)
+                            if isUnlocked {
+                                Image(systemName: "chevron.right")
+                                    .foregroundStyle(.tertiary)
+                            } else {
+                                Image(systemName: "lock.fill")
+                                    .foregroundStyle(.secondary)
+                            }
                         }
                         .padding(.vertical, 6)
+                        .background(RoundedRectangle(cornerRadius: 10).fill(tourStep == .write ? Color.orange.opacity(0.15) : Color.clear))
+                        .overlay(RoundedRectangle(cornerRadius: 10).stroke(tourStep == .write ? Color.orange : Color.clear, lineWidth: 2))
+                    }
+                    .buttonStyle(.plain)
+                    .navigationDestination(isPresented: $showingWriting) {
+                        WritingPracticeView(deck: deck)
+                            .onAppear { DeckIntro.play(for: "writing") }
+                    }
+                    .sheet(isPresented: $showingPaywall) {
+                        PaywallView()
                     }
                 }
             }
             ForEach(grouped.indices, id: \.self) { i in
                 if let header = grouped[i].header {
-                    // Tappable section (Vowels / Consonants): collapsed until opened.
-                    Section {
-                        DisclosureGroup(isExpanded: sectionBinding(for: header)) {
-                            ForEach(grouped[i].words) { word in
-                                WordRow(word: word, onPlay: play(word:))
-                            }
-                        } label: {
-                            Text(header).font(.headline)
+                    // Section header as a plain label — all words visible at once.
+                    // (Kids tap letters directly; no extra tap to open a group.)
+                    Section(header: Text(header).font(.headline)) {
+                        ForEach(grouped[i].words) { word in
+                            WordRow(word: word, onPlay: play(word:),
+                                    deckID: deck.id, deckWords: deck.words, tourTarget: tourTargetFor(word))
                         }
                     }
                 } else {
                     // Decks with no sections (Food, Family): plain list, as before.
+                    // Festivals deck: tap a word to open its story page.
                     Section {
                         ForEach(grouped[i].words) { word in
-                            WordRow(word: word, onPlay: play(word:))
+                            if deck.id == "festivals", word.story != nil {
+                                NavigationLink(destination: FestivalStoryView(word: word)) {
+                                    WordRow(word: word, onPlay: play(word:),
+                                            deckID: deck.id, deckWords: deck.words, tourTarget: tourTargetFor(word))
+                                }
+                            } else {
+                                WordRow(word: word, onPlay: play(word:),
+                                        deckID: deck.id, deckWords: deck.words, tourTarget: tourTargetFor(word))
+                            }
                         }
                     }
                 }
             }
         }
         .navigationTitle(deck.title)
+        .onAppear { startTourIfNeeded() }
     }
 
-    /// Two-way binding between a DisclosureGroup and the openSections set.
-    private func sectionBinding(for header: String) -> Binding<Bool> {
-        Binding(
-            get: { openSections.contains(header) },
-            set: { isOpen in
-                if isOpen { openSections.insert(header) }
-                else { openSections.remove(header) }
-            }
-        )
+    // MARK: Lesson tour
+
+    /// The tour runs on the alphabet deck only (Som's call,
+    /// 2026-10-20): it's where writing starts, letter by letter.
+    private var deckHasTour: Bool {
+        deck.id == "alphabet"
+    }
+
+    private var tourSteps: [LessonTourStep] {
+        var steps: [LessonTourStep] = [.listen]
+        if deckHasTour { steps.append(.write) }
+        steps.append(.speak)
+        return steps
+    }
+
+    private func startTourIfNeeded() {
+        guard deckHasTour, !lessonTourDone else { return }
+        lessonTourDone = true
+        tourStep = .listen
+        // The deck intro ("अक्षरहरू सिकौं!") fires on this same appear —
+        // let it finish before the tour speaks, or the two voices talk
+        // over each other. If the kid already moved on, stay silent.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.4) {
+            if tourStep == .listen { playTourClip(.listen) }
+        }
+    }
+
+    private func advanceTour() {
+        guard let current = tourStep,
+              let idx = tourSteps.firstIndex(of: current) else { tourStep = nil; return }
+        if idx + 1 < tourSteps.count {
+            tourStep = tourSteps[idx + 1]
+            playTourClip(tourSteps[idx + 1])
+        } else {
+            tourStep = nil
+        }
+    }
+
+    private func playTourClip(_ step: LessonTourStep) {
+        let name: String
+        switch step {
+        case .listen: name = "tour_listen_np"
+        case .write: name = "tour_write_np"
+        case .speak: name = "tour_speak_np"
+        }
+        guard let url = URL(string: GharAPI.baseURLString + "/audio/nepal-v1/\(name).m4a") else { return }
+        tourPlayer?.pause()
+        tourPlayer = AVPlayer(url: url)
+        tourPlayer?.play()
+    }
+
+    /// Which tour target (if any) a row should highlight right now:
+    /// listen/speak ring the FIRST row's buttons; write rings the
+    /// first traceable row's pencil. (The alphabet highlights its
+    /// Practice writing row instead — see the deck body.)
+    private func tourTargetFor(_ word: Word) -> LessonTourStep? {
+        guard let step = tourStep else { return nil }
+        switch step {
+        case .listen, .speak:
+            return word.id == deck.words.first?.id ? step : nil
+        case .write:
+            guard deck.id != "alphabet" else { return nil }
+            return word.id == deck.words.first(where: { $0.tracePoints != nil })?.id ? .write : nil
+        }
     }
 
     /// Builds the full audio URL and plays it:
     ///   server address + path from the JSON
     ///   http://localhost:8000 + /audio/nepal-v1/food_momo_np.m4a
     private func play(word: Word) {
+        DeckProgress.markHeard(word.id)
+        DeckProgress.evaluate(deck)
         guard let url = URL(string: GharAPI.baseURLString + word.audioUrl) else { return }
+        player?.pause()
         player = AVPlayer(url: url)
         player?.play()
     }
@@ -5174,6 +10245,21 @@ struct DeckView: View {
 struct WordRow: View {
     let word: Word
     let onPlay: (Word) -> Void
+    /// For the trace gift box: which deck this row is in, and its words.
+    var deckID: String? = nil
+    var deckWords: [Word] = []
+    /// Lesson tour: which button (if any) to ring on this row.
+    var tourTarget: LessonTourStep? = nil
+    @State private var showingTrace = false
+    @State private var showingSpeakCheck = false
+    @AppStorage("ghar.traced.words") private var tracedData = Data()
+
+    /// Green check if this word's tracing is done.
+    private var isTraced: Bool {
+        guard word.tracePoints != nil else { return false }
+        let traced = (try? JSONDecoder().decode(Set<String>.self, from: tracedData)) ?? Set<String>()
+        return traced.contains(word.id)
+    }
 
     var body: some View {
         HStack {
@@ -5206,11 +10292,51 @@ struct WordRow: View {
                 }
             }
             Spacer()
+            // Trace-the-picture: only on words that have outline data
+            // (Animals, Fruits, Body Parts decks).
+            if word.tracePoints != nil {
+                Button(action: { showingTrace = true }) {
+                    Image(systemName: "pencil.line")
+                        .font(.title2)
+                }
+                .buttonStyle(.bordered)
+                .tint(.orange)
+                .overlay(alignment: .topTrailing) {
+                    // Green check once this word is traced.
+                    if isTraced {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundStyle(.green)
+                            .background(.white)
+                            .clipShape(Circle())
+                            .offset(x: 8, y: -8)
+                    }
+                }
+                .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.orange, lineWidth: 3).padding(-5).opacity(tourTarget == .write ? 1 : 0))
+                .scaleEffect(tourTarget == .write ? 1.12 : 1.0)
+                .sheet(isPresented: $showingTrace) {
+                    TraceView(word: word, deckID: deckID, deckWords: deckWords)
+                }
+            }
+            // Record-and-compare: hear the word, record yourself, play both back.
+            Button(action: { showingSpeakCheck = true }) {
+                Image(systemName: "mic.fill")
+                    .font(.title2)
+            }
+            .buttonStyle(.bordered)
+            .tint(.blue)
+            .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.orange, lineWidth: 3).padding(-5).opacity(tourTarget == .speak ? 1 : 0))
+            .scaleEffect(tourTarget == .speak ? 1.12 : 1.0)
+            .accessibilityLabel("Practice saying this word")
+            .sheet(isPresented: $showingSpeakCheck) {
+                SpeakCheckView(word: word)
+            }
             Button(action: { onPlay(word) }) {
                 Image(systemName: "speaker.wave.2.fill")
                     .font(.title2)
             }
             .buttonStyle(.bordered)
+            .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.orange, lineWidth: 3).padding(-5).opacity(tourTarget == .listen ? 1 : 0))
+            .scaleEffect(tourTarget == .listen ? 1.12 : 1.0)
             // No recording yet → dimmed and disabled, instead of a
             // button that silently does nothing when tapped.
             .disabled(!(word.hasAudio ?? true))
@@ -5221,6 +10347,125 @@ struct WordRow: View {
 }
 
 // MARK: - Colors + counting (workbook pages in app form)
+
+/// Festival story page: tap a festival in the Festivals deck to learn
+/// what it is, when it happens, what people do, and a fun fact.
+/// Content comes from the pack JSON (story/when/customs/fun_fact).
+struct FestivalStoryView: View {
+    let word: Word
+    @State private var player: AVPlayer?
+
+    private func play() {
+        let urlString = GharAPI.baseURLString + word.audioUrl
+        if let url = URL(string: urlString) {
+            player?.pause()
+            player = AVPlayer(url: url)
+            player?.play()
+        } else {
+            NepaliSpeaker.say(nepali: word.devanagari, romanized: word.romanized)
+        }
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                // Big festival picture.
+                if let imagePath = word.image, imagePath.hasPrefix("/") {
+                    AsyncImage(url: URL(string: GharAPI.baseURLString + imagePath)) { phase in
+                        switch phase {
+                        case .success(let image):
+                            image.resizable().scaledToFill()
+                        case .failure, .empty:
+                            Color.gray.opacity(0.1)
+                        @unknown default:
+                            Color.gray.opacity(0.1)
+                        }
+                    }
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 220)
+                    .clipShape(RoundedRectangle(cornerRadius: 16))
+                }
+
+                // Title + play button.
+                HStack {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(word.devanagari)
+                            .font(.largeTitle)
+                            .bold()
+                        Text("\(word.romanized) — \(word.english)")
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Button(action: play) {
+                        Image(systemName: "speaker.wave.2.fill")
+                            .font(.title)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(!(word.hasAudio ?? true))
+                    .opacity((word.hasAudio ?? true) ? 1 : 0.35)
+                }
+
+                // What is it?
+                if let story = word.story {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("What is it?")
+                            .font(.headline)
+                        Text(story)
+                            .font(.body)
+                    }
+                    .padding()
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(.blue.opacity(0.08))
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                }
+
+                // When?
+                if let when = word.when {
+                    HStack(spacing: 12) {
+                        Text("📅").font(.title)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("When?").font(.headline)
+                            Text(when).font(.body)
+                        }
+                    }
+                    .padding()
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(.orange.opacity(0.08))
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                }
+
+                // What do people do?
+                if let customs = word.customs, !customs.isEmpty {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("What do people do?").font(.headline)
+                        ForEach(customs, id: \.self) { custom in
+                            Text(custom).font(.body)
+                        }
+                    }
+                    .padding()
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(.green.opacity(0.08))
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                }
+
+                // Did you know?
+                if let fact = word.funFact {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("💡 Did you know?").font(.headline)
+                        Text(fact).font(.body).italic()
+                    }
+                    .padding()
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(.purple.opacity(0.08))
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                }
+            }
+            .padding()
+        }
+        .navigationTitle(word.english)
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
 
 // Hex strings from the pack ("#E53935") become real SwiftUI colors.
 extension Color {
@@ -5273,8 +10518,11 @@ struct ColorsView: View {
     }
 
     private func speak(_ word: Word) {
+        DeckProgress.markHeard(word.id)
+        DeckProgress.evaluate(deck)
         if word.hasAudio == true,
            let url = URL(string: GharAPI.baseURLString + word.audioUrl) {
+            player?.pause()
             player = AVPlayer(url: url)
             player?.play()
         } else {
@@ -5288,6 +10536,9 @@ struct ColorsView: View {
 struct NumbersView: View {
     let deck: Deck
     @State private var player: AVPlayer?
+    @AppStorage("ghar.premium.unlocked") private var isUnlocked = false
+    @State private var showingPaywall = false
+    @State private var showingWriting = false
 
     var body: some View {
         List {
@@ -5306,8 +10557,39 @@ struct NumbersView: View {
                 }
             }
             Section {
+                Button {
+                    if isUnlocked { showingWriting = true }
+                    else { showingPaywall = true }
+                } label: {
+                    HStack(spacing: 12) {
+                        Text("✍️").font(.largeTitle)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Practice writing").font(.headline)
+                            Text("Watch, trace, and write each number")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        if !isUnlocked {
+                            Image(systemName: "lock.fill")
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
+                .buttonStyle(.plain)
+                .navigationDestination(isPresented: $showingWriting) {
+                    WritingPracticeView(deck: deck)
+                        .onAppear { DeckIntro.play(for: "writing") }
+                }
+                .sheet(isPresented: $showingPaywall) {
+                    PaywallView()
+                }
+            }
+            Section {
                 ForEach(deck.words) { word in
-                    WordRow(word: word, onPlay: play(word:))
+                    WordRow(word: word, onPlay: play(word:),
+                            deckID: deck.id, deckWords: deck.words)
                 }
             }
         }
@@ -5315,7 +10597,10 @@ struct NumbersView: View {
     }
 
     private func play(word: Word) {
+        DeckProgress.markHeard(word.id)
+        DeckProgress.evaluate(deck)
         guard let url = URL(string: GharAPI.baseURLString + word.audioUrl) else { return }
+        player?.pause()
         player = AVPlayer(url: url)
         player?.play()
     }
@@ -5405,6 +10690,7 @@ struct CountingView: View {
     private func speakNumber(_ word: Word) {
         if word.hasAudio == true,
            let url = URL(string: GharAPI.baseURLString + word.audioUrl) {
+            player?.pause()
             player = AVPlayer(url: url)
             player?.play()
         } else {
@@ -5537,7 +10823,18 @@ fileprivate enum WritingMetrics {
     static let canvas: CGFloat = 300
     static let grid = 36
     static let passThreshold = 0.6
-    static let tryItThreshold = 0.8
+    // Path-based validation (2026-10-08): did the ink follow the lines?
+    /// Trace mode: recall ≥ 0.4. Your good trace scores 0.48; a scribble
+    /// scores 0.38. The gap is small, so precision does the heavy lifting.
+    static let tracePathRecall = 0.4
+    /// Trace mode: precision ≥ 0.58. Your good trace: 0.72. Scribble: 0.44.
+    /// Clean separation.
+    static let tracePathPrecision = 0.58
+    /// Try-it: 55% of ink must be near the path (rejects scribbles).
+    static let tryItPathPrecision = 0.55
+    /// Try-it: must touch 30% of the path (sanity check — drew something
+    /// substantial, not just a dot). Precision is the real gate.
+    static let tryItPathRecall = 0.3
     static let xpReward = 5
 }
 
@@ -5551,7 +10848,19 @@ fileprivate struct LetterGuide {
     let outline: CGPath     // the letter as a path, 300×300 UIKit coords
     let targets: Set<Int>   // grid cells the letter fills (row * 36 + col)
     let sampler: PathSampler
-    let bbox: CGRect        // outline's bounding box, 300-box coords
+    let bbox: CGRect        // outline's TIGHT bounding box (boundingBoxOfPath,
+                            // NOT boundingBox — that one includes curve control
+                            // points and inflates the box for round letters
+                            // like ग and ट, which broke Try-it grading for
+                            // them: ink was mapped onto a box bigger than
+                            // the letter and could never line up. 2026-10-23)
+    let pathCells: Set<Int> // DENSE: cells near the outline path — for
+                            // PRECISION ("is the ink near the letter?").
+    let pathRecallSamples: Set<Int> // SPARSE: 25 samples — for RECALL
+                                    // ("did they cover the whole letter?").
+    let skeletonDots: [CGPoint]    // Single-line dots down the middle of
+                                    // each stroke — Trace mode's targets
+                                    // (animal-tracing style).
 
     static func make(for text: String) -> LetterGuide {
         let S = WritingMetrics.canvas
@@ -5637,9 +10946,113 @@ fileprivate struct LetterGuide {
                 }
             }
         }
+        // Path cells (DENSE): every sampler point, ±1 cell. Used for
+        // PRECISION — "is the ink near the letter?" A dense path means a
+        // good trace has high overlap; a scribble has low overlap.
+        let sampler = PathSampler(outline)
+        var pathCells = Set<Int>()
+        for pt in sampler.points {
+            let cc = Int(pt.x / cell), cr = Int(pt.y / cell)
+            for dr in -1...1 {
+                for dc in -1...1 {
+                    let r = cr + dr, c = cc + dc
+                    if r >= 0, r < g, c >= 0, c < g {
+                        pathCells.insert(r * g + c)
+                    }
+                }
+            }
+        }
+        // Path recall samples (SPARSE): 25 evenly-spaced points, ±1 cell.
+        // Used for RECALL — "did they cover the whole letter?" Sparse so
+        // a complete trace scores high without needing pixel-perfection.
+        var pathRecallSamples = Set<Int>()
+        let numSamples = 25
+        for i in 0..<numSamples {
+            let d = CGFloat(i) / CGFloat(numSamples) * sampler.total
+            let pt = sampler.point(at: d)
+            let cc = Int(pt.x / cell), cr = Int(pt.y / cell)
+            for dr in -1...1 {
+                for dc in -1...1 {
+                    let r = cr + dr, c = cc + dc
+                    if r >= 0, r < g, c >= 0, c < g {
+                        pathRecallSamples.insert(r * g + c)
+                    }
+                }
+            }
+        }
         return LetterGuide(outline: outline,
-                           targets: targets, sampler: PathSampler(outline),
-                           bbox: outline.boundingBox)
+                           targets: targets, sampler: sampler,
+                           bbox: outline.boundingBoxOfPath, pathCells: pathCells,
+                           pathRecallSamples: pathRecallSamples,
+                           skeletonDots: Self.skeletonDots(outline: outline))
+    }
+
+    /// The letter's single-line skeleton, as dots. Rasterize the
+    /// glyph fill on a fine grid, thin it to the medial axis
+    /// (Zhang–Suen), then pick evenly-spaced dots along what's
+    /// left. The result follows how the letter is actually
+    /// written — one line through the middle of every stroke —
+    /// instead of a ring around the outline ("big lettering").
+    private static func skeletonDots(outline: CGPath) -> [CGPoint] {
+        let F = 90
+        let cs = WritingMetrics.canvas / CGFloat(F)
+        var grid = [Bool](repeating: false, count: F * F)
+        for r in 0..<F {
+            for c in 0..<F {
+                let pt = CGPoint(x: (CGFloat(c) + 0.5) * cs,
+                                 y: (CGFloat(r) + 0.5) * cs)
+                if outline.contains(pt, using: .evenOdd) {
+                    grid[r * F + c] = true
+                }
+            }
+        }
+        func n(_ r: Int, _ c: Int) -> Bool {
+            (r >= 0 && r < F && c >= 0 && c < F) ? grid[r * F + c] : false
+        }
+        var changed = true
+        while changed {
+            changed = false
+            for sub in 0..<2 {
+                var kill: [Int] = []
+                for r in 1..<(F - 1) {
+                    for c in 1..<(F - 1) {
+                        guard grid[r * F + c] else { continue }
+                        let p2 = n(r - 1, c), p3 = n(r - 1, c + 1),
+                            p4 = n(r, c + 1), p5 = n(r + 1, c + 1),
+                            p6 = n(r + 1, c), p7 = n(r + 1, c - 1),
+                            p8 = n(r, c - 1), p9 = n(r - 1, c - 1)
+                        let ring = [p2, p3, p4, p5, p6, p7, p8, p9]
+                        let b = ring.filter { $0 }.count
+                        guard b >= 2 && b <= 6 else { continue }
+                        var a = 0
+                        for i in 0..<8 where !ring[i] && ring[(i + 1) % 8] { a += 1 }
+                        guard a == 1 else { continue }
+                        if sub == 0 {
+                            if p2 && p4 && p6 { continue }
+                            if p4 && p6 && p8 { continue }
+                        } else {
+                            if p2 && p4 && p8 { continue }
+                            if p2 && p6 && p8 { continue }
+                        }
+                        kill.append(r * F + c)
+                    }
+                }
+                if !kill.isEmpty { changed = true }
+                for i in kill { grid[i] = false }
+            }
+        }
+        var dots: [CGPoint] = []
+        let minGap: CGFloat = 9
+        for r in 0..<F {
+            for c in 0..<F where grid[r * F + c] {
+                let p = CGPoint(x: (CGFloat(c) + 0.5) * cs,
+                                y: (CGFloat(r) + 0.5) * cs)
+                if dots.allSatisfy({ hypot($0.x - p.x, $0.y - p.y) >= minGap }) {
+                    dots.append(p)
+                }
+            }
+        }
+        return dots
     }
 }
 
@@ -5767,7 +11180,9 @@ struct LetterPracticeView: View {
     @State private var guide: LetterGuide?
     @State private var strokes: [[CGPoint]] = []
     @State private var currentStroke: [CGPoint] = []
-    @State private var covered = Set<Int>()
+    @State private var dotHits = Set<Int>()
+    @State private var showTraceHint = false
+    @State private var tryItCoverage = 0.0
     @State private var watching = false
     @State private var watchStart = Date()
     @State private var tryIt = false
@@ -5777,6 +11192,7 @@ struct LetterPracticeView: View {
     @State private var player: AVPlayer?
     @AppStorage("ghar.xp.total") private var totalXP = 0
     @AppStorage("ghar.writing.done") private var doneIDs = ""
+    @AppStorage("ghar.writing.traced") private var tracedIDs = ""
 
     init(words: [Word], index: Int) {
         self.words = words
@@ -5784,9 +11200,26 @@ struct LetterPracticeView: View {
     }
 
     private var word: Word { words[idx] }
+    /// Trace-mode checkpoints (animal-tracing style, 2026-10-23):
+    /// the letter's single-line skeleton dots, baked into the guide.
+    /// The kid drags through them, each dot lights up as the finger
+    /// passes, and lighting ~70% completes the trace. No precision
+    /// score and no stretch normalization in Trace mode — progress
+    /// only goes up, so a good trace can't be failed by the grader.
+    private var checkpoints: [CGPoint] {
+        guide?.skeletonDots ?? []
+    }
+
+    private var dotFraction: Double {
+        let total = checkpoints.count
+        guard total > 0 else { return 0 }
+        return Double(dotHits.count) / Double(total)
+    }
+
+    /// Progress bar: dots lit in Trace mode, skeleton coverage in
+    /// Try-it (both grade the NEW single-line lettering).
     private var progress: Double {
-        guard let g = guide, !g.targets.isEmpty else { return 0 }
-        return min(1, Double(covered.count) / Double(g.targets.count))
+        tryIt ? tryItCoverage : dotFraction
     }
 
     /// Watch animation duration: scales with the word length so a full
@@ -5806,6 +11239,24 @@ struct LetterPracticeView: View {
             Text(tryIt ? "Write it yourself — no tracing! Earn XP ⭐" : "Trace with your finger — practice, no XP yet")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
+            // (Debug readout lives in a top-level overlay below, so the
+            // celebration card can't cover it.)
+            // Gentle nudge: lots of ink but not on the letter — tell the
+            // kid what to fix instead of silently withholding the cheer.
+            // Hint: in Try-it mode, if there's a decent amount of ink but
+            // it's not near the path, nudge them to follow the lines.
+            if tryIt, !celebrated, tryItCoverage >= 0.3, tryItCoverage < 0.6 {
+                Text("Hmm — that's not quite the letter's shape yet ✍️")
+                    .font(.subheadline)
+                    .foregroundStyle(.orange)
+            }
+            // Trace anti-scribble: dots all lit but the ink sprayed
+            // everywhere — say so instead of silently withholding.
+            if !tryIt, showTraceHint, !celebrated {
+                Text("Too much ink off the line — tap ↺ and follow the dots ✏️")
+                    .font(.subheadline)
+                    .foregroundStyle(.orange)
+            }
             controls
             Spacer()
         }
@@ -5820,7 +11271,9 @@ struct LetterPracticeView: View {
         .onChange(of: tryIt) { _, _ in
             strokes = []
             currentStroke = []
-            covered = []
+            dotHits = []
+            showTraceHint = false
+            tryItCoverage = 0
             celebrated = false
             justEarned = false
         }
@@ -5864,15 +11317,19 @@ struct LetterPracticeView: View {
                         DragGesture(minimumDistance: 0, coordinateSpace: .local)
                             .onChanged { v in
                                 guard !celebrated else { return }
+                                if currentStroke.isEmpty { showTraceHint = false }
+                                let prev = currentStroke.last
                                 currentStroke.append(v.location)
+                                if !tryIt {
+                                    hitTestSegment(from: prev ?? v.location, to: v.location)
+                                }
                             }
                             .onEnded { _ in
                                 if !currentStroke.isEmpty {
                                     strokes.append(currentStroke)
                                     currentStroke = []
                                 }
-                                recomputeCoverage()
-                                checkDone()
+                                if tryIt { checkDone() } else { checkTraceDone() }
                             }
                     )
                 // Watch 👀 via TimelineView: it ticks 60×/s on its own and
@@ -5959,19 +11416,37 @@ struct LetterPracticeView: View {
         let ox = (size.width - WritingMetrics.canvas * s) / 2
         let oy = (size.height - WritingMetrics.canvas * s) / 2
 
-        // The template: the outline filled, solid enough to trace in Trace
-        // mode. In Try-it mode the canvas is blank — from memory.
+        // A whisper of the letter behind the dots (Som, 2026-10-23):
+        // the heavy "big lettering" outline stays gone — the dots
+        // are the guide — but a faint shape underneath makes the
+        // letter read clearly while tracing. Try-it stays blank.
         if !tryIt {
             let toCanvas = CGAffineTransform(scaleX: s, y: s)
                 .translatedBy(x: ox, y: oy)
-            var templatePath = Path(g.outline)
-            templatePath = templatePath.applying(toCanvas)
-            ctx.fill(templatePath, with: .color(.black.opacity(0.32)))
+            let templatePath = Path(g.outline).applying(toCanvas)
+            ctx.stroke(templatePath, with: .color(.black.opacity(0.13)), lineWidth: 3)
         }
 
         // The kid's ink.
         for stroke in strokes { paint(stroke, in: &ctx, scale: s) }
         paint(currentStroke, in: &ctx, scale: s)
+
+        // Trace-mode dots, drawn last so their state reads over the
+        // ink: pale = not yet touched, green = lit.
+        if !tryIt {
+            let cps = checkpoints
+            for (i, cp) in cps.enumerated() {
+                let c = CGPoint(x: cp.x * s + ox, y: cp.y * s + oy)
+                let r: CGFloat = 5.5 * s
+                let rect = CGRect(x: c.x - r, y: c.y - r, width: 2 * r, height: 2 * r)
+                if dotHits.contains(i) {
+                    ctx.fill(Path(ellipseIn: rect), with: .color(.green))
+                } else {
+                    ctx.fill(Path(ellipseIn: rect), with: .color(.gray.opacity(0.35)))
+                    ctx.stroke(Path(ellipseIn: rect), with: .color(.gray.opacity(0.6)), lineWidth: 1)
+                }
+            }
+        }
         // (Watch animation lives in WatchOverlayView, a real SwiftUI view
         // layered above — Canvas was silently swallowing its redraws.)
     }
@@ -5990,85 +11465,164 @@ struct LetterPracticeView: View {
         ctx.stroke(p, with: .color(.orange),
                    style: StrokeStyle(lineWidth: 14 * s, lineCap: .round, lineJoin: .round))
     }
-
-    /// Size-independent coverage: the kid's drawing is normalized to the
-    /// template's bounding box (uniform scale, centered) before checking
-    /// grid overlap. A small-but-correct letter passes; a scribble doesn't.
-    /// Called when each stroke ends; `progress` reads the cached `covered`.
-    private func recomputeCoverage() {
-        guard let g = guide, canvasSize.width > 0 else { return }
-        let s = min(canvasSize.width, canvasSize.height) / WritingMetrics.canvas
-        let ox = (canvasSize.width - WritingMetrics.canvas * s) / 2
-        let oy = (canvasSize.height - WritingMetrics.canvas * s) / 2
-
-        // All ink in 300-box coords.
-        var pts: [CGPoint] = []
-        for stroke in strokes {
-            for p in stroke {
-                pts.append(CGPoint(x: (p.x - ox) / s, y: (p.y - oy) / s))
-            }
-        }
-        guard !pts.isEmpty else { covered = []; return }
-        let ux0 = pts.map(\.x).min()!, ux1 = pts.map(\.x).max()!
-        let uy0 = pts.map(\.y).min()!, uy1 = pts.map(\.y).max()!
-        let uw = ux1 - ux0, uh = uy1 - uy0
-        guard uw > 4 && uh > 4 else { covered = []; return } // a dot, not a letter
-
-        // Map the kid's bbox onto the template's bbox, uniform scale.
-        let tb = g.bbox
-
-        // Multi-character words (like names): guard against the "one big
-        // letter" cheat. The normalizer below would stretch a single
-        // well-drawn letter to fill the whole name's box and hit 80% of
-        // the cells. Require the ink to actually span most of the
-        // template's width before we'll call it complete.
-        if word.devanagari.count > 1, uw < tb.width * 0.6 {
-            covered = []
-            return
-        }
-
-        let sc = min(tb.width / uw, tb.height / uh)
-        let cell = WritingMetrics.canvas / CGFloat(WritingMetrics.grid)
-        var hit = Set<Int>()
-        for p in pts {
-            let mx = tb.minX + (tb.width - uw * sc) / 2 + (p.x - ux0) * sc
-            let my = tb.minY + (tb.height - uh * sc) / 2 + (p.y - uy0) * sc
-            let cc = Int(mx / cell), cr = Int(my / cell)
-            for dr in -1...1 {
-                for dc in -1...1 {
-                    let r = cr + dr, c = cc + dc
-                    if r >= 0, r < WritingMetrics.grid,
-                       c >= 0, c < WritingMetrics.grid {
-                        hit.insert(r * WritingMetrics.grid + c)
-                    }
-                }
-            }
-        }
-        covered = hit
-    }
-
     // MARK: - Flow
 
     private func checkDone() {
-        // Both modes celebrate at 80% — the kid did the work. But only
-        // Try-it (writing from memory, no tracing) earns XP. Trace is
-        // practice: the cheer without the payout.
+        // Path-based validation (2026-10-08): did the ink follow the
+        // template's lines? Replaces the pixel-blur heuristics that
+        // couldn't tell scribbles from traces.
         //
-        // Multi-character words (names): don't celebrate until the WHOLE
-        // name is written. The 60% width gate in updateCovered keeps
-        // partial ink from counting, but 2-of-3 characters can still
-        // pass it. Require the ink to span nearly the full template
-        // width so "halfway through" never triggers the cheer.
-        guard !celebrated,
-              progress >= WritingMetrics.tryItThreshold else { return }
-        if word.devanagari.count > 1 {
-            let pts = strokes.flatMap { $0 } + currentStroke
-            guard !pts.isEmpty else { return }
-            let ux0 = pts.map(\.x).min()!, ux1 = pts.map(\.x).max()!
-            let uw = ux1 - ux0
-            guard let g = guide, uw >= g.bbox.width * 0.85 else { return }
+        // Trace mode (hollow outline visible): recall (touch 80% of the
+        // lines) + precision (50% of ink on the lines — rejects coloring
+        // in instead of tracing).
+        //
+        // Try-it mode (from memory): precision (is ink near the lines?
+        // rejects scribbles) + recall (did you draw enough?).
+        //
+        // Only Try-it earns XP; Trace is practice, cheer without payout.
+        // Try-it only: Trace mode completes through its dots —
+        // celebrateCompletion() fires from the dot hit-test at 75%.
+        guard !celebrated, tryIt else { return }
+        // No stroke cap: the lab-validated grader below punishes
+        // extra ink through its length and distance scores, and a
+        // careful drawing may take many strokes.
+        let r = gradeTryIt()
+        tryItCoverage = r.coverage
+        guard r.passed else { return }
+        celebrateCompletion()
+    }
+
+    /// Try-it grading — $1-recognizer style, LAB-VALIDATED
+    /// (2026-10-23): verified offline against 200+ synthetic
+    /// drawings (wobbled / proportion-morphed / rescaled correct
+    /// letters vs lines, stripes, blobs, half-letters, wrong
+    /// letters) before shipping; every earlier grader was tuned
+    /// blind against live tests and swung between too strict and
+    /// too lenient. Method: sample the ink evenly, normalize
+    /// BOTH the ink and the letter's skeleton checkpoints by
+    /// center + RMS spread, compare as point clouds — mean
+    /// nearest-neighbor distance both ways plus the template's
+    /// 90th-percentile distance (a smooth score, no cliff-edge
+    /// radius). Guards: total ink length must be 0.8–2.7× the
+    /// skeleton's normalized length (kills blobs and stripes —
+    /// far too much ink — and half-letters — too little), and
+    /// ≥18% of the ink must run vertically-ish (kills line
+    /// cheats). Known limit, measured in the lab: a neatly drawn
+    /// look-alike letter (थ for ग) can pass — no geometry-only
+    /// grader separates those reliably, and it is the ONLY
+    /// failure family left in the test battery.
+    private func gradeTryIt() -> (coverage: Double, passed: Bool, debug: String) {
+        let cps = checkpoints
+        guard !cps.isEmpty, canvasSize.width > 0 else { return (0, false, "") }
+        let s = min(canvasSize.width, canvasSize.height) / WritingMetrics.canvas
+        guard s > 0 else { return (0, false, "") }
+        let ox = (canvasSize.width - WritingMetrics.canvas * s) / 2
+        let oy = (canvasSize.height - WritingMetrics.canvas * s) / 2
+
+        // Ink: evenly stepped samples + true segment lengths,
+        // per stroke (no pen jumps counted).
+        var samples: [CGPoint] = []
+        var inkLen: CGFloat = 0
+        var vertLen: CGFloat = 0
+        for stroke in strokes {
+            var prev: CGPoint? = nil
+            for p in stroke {
+                let bp = CGPoint(x: (p.x - ox) / s, y: (p.y - oy) / s)
+                if let pv = prev {
+                    let dx = bp.x - pv.x, dy = bp.y - pv.y
+                    let d = hypot(dx, dy)
+                    inkLen += d
+                    if abs(dy) > abs(dx) { vertLen += d }
+                    let steps = max(1, Int(d / 5))
+                    for i in 1...steps {
+                        let t = CGFloat(i) / CGFloat(steps)
+                        samples.append(CGPoint(x: pv.x + dx * t,
+                                               y: pv.y + dy * t))
+                    }
+                }
+                prev = bp
+            }
         }
+        guard samples.count > 4, inkLen > 0 else { return (0, false, "") }
+
+        func centroid(_ ps: [CGPoint]) -> CGPoint {
+            CGPoint(x: ps.map(\.x).reduce(0, +) / CGFloat(ps.count),
+                    y: ps.map(\.y).reduce(0, +) / CGFloat(ps.count))
+        }
+        func spread(_ ps: [CGPoint], _ c: CGPoint) -> CGFloat {
+            sqrt(ps.map { hypot($0.x - c.x, $0.y - c.y) }
+                   .map { $0 * $0 }.reduce(0, +) / CGFloat(ps.count))
+        }
+        let ic = centroid(samples), kc = centroid(cps)
+        let ispr = spread(samples, ic), kspr = spread(cps, kc)
+        guard ispr > 2, kspr > 2 else { return (0, false, "") }
+        let A = samples.map { CGPoint(x: ($0.x - ic.x) / ispr,
+                                      y: ($0.y - ic.y) / ispr) }
+        let B = cps.map { CGPoint(x: ($0.x - kc.x) / kspr,
+                                  y: ($0.y - kc.y) / kspr) }
+
+        var dT: [CGFloat] = []
+        for b in B {
+            var best = CGFloat.greatestFiniteMagnitude
+            for a in A { best = min(best, hypot(a.x - b.x, a.y - b.y)) }
+            dT.append(best)
+        }
+        var dI: [CGFloat] = []
+        for a in A {
+            var best = CGFloat.greatestFiniteMagnitude
+            for b in B { best = min(best, hypot(a.x - b.x, a.y - b.y)) }
+            dI.append(best)
+        }
+        let mean = (dT.reduce(0, +) / CGFloat(dT.count)
+                    + dI.reduce(0, +) / CGFloat(dI.count)) / 2
+        let sortedDT = dT.sorted()
+        let p90 = sortedDT[min(sortedDT.count - 1,
+                               Int(0.9 * Double(sortedDT.count)))]
+        let coverage = Double(dT.filter { $0 <= 0.30 }.count) / Double(dT.count)
+
+        // Skeleton length: greedy nearest-neighbor chain over the
+        // arc-spaced checkpoints tracks the line's true length.
+        var skelLen: CGFloat = 0
+        if cps.count > 1 {
+            var unvisited = Set(cps.indices)
+            var cur = cps.startIndex
+            unvisited.remove(cur)
+            while !unvisited.isEmpty {
+                var bestD = CGFloat.greatestFiniteMagnitude
+                var bestI = cur
+                for i in unvisited {
+                    let d = hypot(cps[i].x - cps[cur].x, cps[i].y - cps[cur].y)
+                    if d < bestD { bestD = d; bestI = i }
+                }
+                skelLen += bestD
+                cur = bestI
+                unvisited.remove(cur)
+            }
+        }
+        guard skelLen > 0 else { return (coverage, false, "") }
+        let nratio = (inkLen / ispr) / (skelLen / kspr)
+        let vert = vertLen / inkLen
+        // Gates recalibrated 2026-10-23 on the first REAL data
+        // point (Som's careful ग: mean .20, tail .44, len 0.6,
+        // vert .68 — synthetic ink had been ~40% too faithful:
+        // real hands shorten headlines, displace whole parts, and
+        // chord the curves, so real scores run worse than every
+        // lab positive). Margins sit ~20% beyond his numbers;
+        // the garbage families still fail by ~2x (line mean
+        // .43+, stripes vert ~0, blob len 4.4+).
+        let passed = mean <= 0.24 && p90 <= 0.50
+            && nratio >= 0.50 && nratio <= 2.7 && vert >= 0.18
+        return (coverage, passed, "")
+    }
+
+
+    /// The shared finish line: Try-it arrives by passing its grader,
+    /// Trace arrives by lighting ~70% of its dots. Marks the word
+    /// heard, pays Try-it XP, files the trace for the gift box, and
+    /// plays the cheer.
+    private func celebrateCompletion() {
         celebrated = true
+        DeckProgress.markHeard(word.id)
         if tryIt {
             var done = Set(doneIDs.split(separator: ",").map(String.init))
             if done.insert(word.id).inserted {
@@ -6076,15 +11630,112 @@ struct LetterPracticeView: View {
                 totalXP += WritingMetrics.xpReward
                 justEarned = true
             }
+            // Writing it freehand proves the tracing skill too —
+            // file it as traced so the mystery-box count and the
+            // section boxes credit it (Som's report, 2026-10-23:
+            // "completed both but it didn't count").
+            var tracedToo = Set(tracedIDs.split(separator: ",").map(String.init))
+            if tracedToo.insert(word.id).inserted {
+                tracedIDs = tracedToo.sorted().joined(separator: ",")
+            }
+        } else {
+            // Trace mode: mark as traced (for the mystery gift box).
+            // No XP — trace is practice, per the existing design.
+            var traced = Set(tracedIDs.split(separator: ",").map(String.init))
+            if traced.insert(word.id).inserted {
+                tracedIDs = traced.sorted().joined(separator: ",")
+            }
         }
         // His voice does the congratulating — स्याबास! / राम्रो! / बधाई छ!
         WinFanfare.play()
     }
 
+    /// Mark every checkpoint the finger just passed near. Ink points
+    /// arrive in canvas coords; checkpoints live in the 300-box, so
+    /// convert with the same transform the coverage code uses. The
+    /// segment is stepped every ~5 units so a fast flick can't jump
+    /// clean over a dot.
+    private func hitTestSegment(from a: CGPoint, to b: CGPoint) {
+        guard guide != nil, canvasSize.width > 0, !celebrated else { return }
+        let s = min(canvasSize.width, canvasSize.height) / WritingMetrics.canvas
+        guard s > 0 else { return }
+        let ox = (canvasSize.width - WritingMetrics.canvas * s) / 2
+        let oy = (canvasSize.height - WritingMetrics.canvas * s) / 2
+        let pa = CGPoint(x: (a.x - ox) / s, y: (a.y - oy) / s)
+        let pb = CGPoint(x: (b.x - ox) / s, y: (b.y - oy) / s)
+        let dist = hypot(pb.x - pa.x, pb.y - pa.y)
+        let steps = max(1, Int(dist / 5))
+        let radius: CGFloat = 17
+        let cps = checkpoints
+        for step in 0...steps {
+            let t = CGFloat(step) / CGFloat(steps)
+            let p = CGPoint(x: pa.x + (pb.x - pa.x) * t,
+                            y: pa.y + (pb.y - pa.y) * t)
+            for (i, cp) in cps.enumerated() where !dotHits.contains(i) {
+                if hypot(cp.x - p.x, cp.y - p.y) <= radius {
+                    dotHits.insert(i)
+                }
+            }
+        }
+    }
+
+    /// Trace mode's finish line, judged when the finger lifts:
+    /// 75% of the dots lit AND at least ~55% of the ink actually
+    /// on the line. The second test is the anti-scribble — spraying
+    /// ink over the whole letter lights the dots but puts most ink
+    /// off the line, so it earns the hint instead of the cheer.
+    private func checkTraceDone() {
+        guard !celebrated, !tryIt else { return }
+        guard dotFraction >= 0.75 else { return }
+        if onLineFraction >= 0.55 {
+            celebrateCompletion()
+        } else {
+            showTraceHint = true
+        }
+    }
+
+    /// What fraction of the ink (sampled along every stroke) lies
+    /// within ~14 units of a checkpoint — i.e., on the letter's
+    /// single line. Honest tracing lives near the line even when
+    /// it's wobbly; scribbles don't.
+    private var onLineFraction: Double {
+        let cps = checkpoints
+        guard !cps.isEmpty, canvasSize.width > 0 else { return 0 }
+        let s = min(canvasSize.width, canvasSize.height) / WritingMetrics.canvas
+        guard s > 0 else { return 0 }
+        let ox = (canvasSize.width - WritingMetrics.canvas * s) / 2
+        let oy = (canvasSize.height - WritingMetrics.canvas * s) / 2
+        var total = 0, onLine = 0
+        for stroke in strokes {
+            var prev: CGPoint? = nil
+            for p in stroke {
+                let bp = CGPoint(x: (p.x - ox) / s, y: (p.y - oy) / s)
+                if let pv = prev {
+                    let d = hypot(bp.x - pv.x, bp.y - pv.y)
+                    let steps = max(1, Int(d / 5))
+                    for i in 1...steps {
+                        let t = CGFloat(i) / CGFloat(steps)
+                        let q = CGPoint(x: pv.x + (bp.x - pv.x) * t,
+                                        y: pv.y + (bp.y - pv.y) * t)
+                        total += 1
+                        if cps.contains(where: { hypot($0.x - q.x, $0.y - q.y) <= 14 }) {
+                            onLine += 1
+                        }
+                    }
+                }
+                prev = bp
+            }
+        }
+        guard total > 0 else { return 0 }
+        return Double(onLine) / Double(total)
+    }
+
     private func reset() {
         strokes = []
         currentStroke = []
-        covered = []
+        dotHits = []
+        showTraceHint = false
+        tryItCoverage = 0
         celebrated = false
         justEarned = false
         watching = false
@@ -6094,7 +11745,9 @@ struct LetterPracticeView: View {
         guard !watching, guide != nil else { return }
         strokes = []
         currentStroke = []
-        covered = []
+        dotHits = []
+        showTraceHint = false
+        tryItCoverage = 0
         // TimelineView drives the animation from watchStart; we just flip
         // `watching` on and off. Nothing to invalidate, nothing to leak.
         watchStart = Date()
@@ -6108,6 +11761,7 @@ struct LetterPracticeView: View {
     private func hearLetter() {
         if word.hasAudio == true,
            let url = URL(string: GharAPI.baseURLString + word.audioUrl) {
+            player?.pause()
             player = AVPlayer(url: url)
             player?.play()
         } else {
@@ -6127,20 +11781,67 @@ struct LetterPracticeView: View {
 struct WritingPracticeView: View {
     let deck: Deck
     @AppStorage("ghar.writing.done") private var doneIDs = ""
+    @AppStorage("ghar.writing.traced") private var tracedIDs = ""
+    @AppStorage("ghar.giftbox.opened") private var giftBoxData = Data()
     @AppStorage("ghar.myname.devanagari") private var myName = ""
     @AppStorage("ghar.myname.english") private var myNameEnglish = ""
     @State private var selection: LetterSelection?
     @State private var showingNameSetup = false
     @State private var namePractice: LetterSelection?
+    @State private var giftBoxDeckID: String?
+    @State private var showingGiftBox = false
 
     private var done: Set<String> {
         Set(doneIDs.split(separator: ",").map(String.init))
+    }
+    private var traced: Set<String> {
+        Set(tracedIDs.split(separator: ",").map(String.init))
+    }
+    private var giftBoxOpenedIDs: Set<String> {
+        (try? JSONDecoder().decode(Set<String>.self, from: giftBoxData)) ?? Set<String>()
+    }
+    /// True when every letter in the section is traced and its box is unclaimed.
+    private func sectionBoxReady(_ letters: [Word], deckID: String) -> Bool {
+        !letters.isEmpty
+            && letters.allSatisfy({ traced.contains($0.id) || done.contains($0.id) })
+            && !giftBoxOpenedIDs.contains(deckID)
+    }
+
+    /// Section header with a 🎁 button when the section is done but its
+    /// mystery box hasn't been claimed yet.
+    private func writingSectionHeader(title: String, letters: [Word], deckID: String) -> some View {
+        HStack {
+            Text(title)
+            Spacer()
+            let got = letters.filter({ traced.contains($0.id) }).count
+            Text("\(got)/\(letters.count)")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            if sectionBoxReady(letters, deckID: deckID) {
+                Button(action: {
+                    giftBoxDeckID = deckID
+                    showingGiftBox = true
+                }) {
+                    Text("🎁")
+                        .font(.title3)
+                }
+                .buttonStyle(.plain)
+            }
+        }
     }
     private var vowels: [Word] {
         deck.words.filter { $0.section?.hasPrefix("Vowels") == true }
     }
     private var consonants: [Word] {
         deck.words.filter { $0.section?.hasPrefix("Consonants") == true }
+    }
+    private var digits: [Word] {
+        // Devanagari digits ०-९: single-character words in the numbers deck.
+        deck.words.filter { $0.devanagari.count == 1 && $0.devanagari.first?.isNumber == true }
+    }
+    private var teenNumbers: [Word] {
+        // Multi-digit numbers (१० and up): practice writing the full numeral.
+        deck.words.filter { $0.devanagari.count > 1 && $0.devanagari.allSatisfy({ $0.isNumber }) }
     }
 
     /// A synthetic Word for the kid's name, so the existing practice view
@@ -6157,6 +11858,23 @@ struct WritingPracticeView: View {
 
     var body: some View {
         List {
+            Section {
+                HStack(spacing: 12) {
+                    Text("🎁").font(.largeTitle)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Mystery box!").font(.headline)
+                        let allLetters = vowels + consonants + digits
+                        let doneCount = allLetters.filter({ traced.contains($0.id) || done.contains($0.id) }).count
+                        Text("Finish a section below to earn a mystery gift box (\(doneCount)/\(allLetters.count) letters done)")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                        Text("\u{2605} = wrote it on their own (earns XP) \u{B7} \u{2713} = traced it")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .padding(.vertical, 6)
+            }
             Section("My Name") {
                 Button {
                     if myName.isEmpty {
@@ -6191,15 +11909,24 @@ struct WritingPracticeView: View {
                 .buttonStyle(.plain)
             }
             if !vowels.isEmpty {
-                Section("Vowels (स्वर)") { letterGrid(vowels) }
+                Section(header: writingSectionHeader(title: "Vowels (स्वर)", letters: vowels, deckID: "writing-vowels")) { letterGrid(vowels) }
             }
             if !consonants.isEmpty {
-                Section("Consonants (व्यञ्जन)") { letterGrid(consonants) }
+                Section(header: writingSectionHeader(title: "Consonants (व्यञ्जन)", letters: consonants, deckID: "writing-consonants")) { letterGrid(consonants) }
+            }
+            if !digits.isEmpty {
+                Section(header: writingSectionHeader(title: "Digits (अङ्क)", letters: digits, deckID: "writing-digits")) { letterGrid(digits) }
+            }
+            if !teenNumbers.isEmpty {
+                Section("Bigger numbers") { letterGrid(teenNumbers) }
             }
         }
         .navigationTitle("Practice writing ✍️")
         .sheet(isPresented: $showingNameSetup) {
             NameSetupView(savedName: $myName, savedEnglish: $myNameEnglish)
+        }
+        .sheet(isPresented: $showingGiftBox) {
+            GiftBoxView(deckID: giftBoxDeckID)
         }
         .fullScreenCover(item: $selection) { sel in
             NavigationStack {
@@ -6254,6 +11981,10 @@ struct WritingPracticeView: View {
                             if done.contains(w.id) {
                                 Image(systemName: "star.fill")
                                     .foregroundStyle(.yellow)
+                                    .font(.caption)
+                            } else if traced.contains(w.id) {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundStyle(.green)
                                     .font(.caption)
                             }
                         }

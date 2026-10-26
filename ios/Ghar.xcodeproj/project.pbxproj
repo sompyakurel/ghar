@@ -7,20 +7,50 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		111111111111111111111112 /* ParentsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 111111111111111111111113 /* ParentsView.swift */; };
+		222222222222222222222223 /* SpeakCheckView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 222222222222222222222224 /* SpeakCheckView.swift */; };
 		2B2B2B2B2B2B2B2B2B2B2B2B /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 1A1A1A1A1A1A1A1A1A1A1A1A /* Assets.xcassets */; };
+		37F4EE14E8AE46FDB1902452 /* TraceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 66DCD3EB1E2247BDAE202A51 /* TraceView.swift */; };
+		444444444444444444444445 /* SongsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 444444444444444444444446 /* SongsView.swift */; };
+		44D65358D62BE4DC9271C053 /* SentencesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3AD624EBAE3638CB9449404D /* SentencesView.swift */; };
+		7AEA28C63075E8680044A87B /* boy-neutral.jpg in Resources */ = {isa = PBXBuildFile; fileRef = 7AEA28C53075E8680044A87B /* boy-neutral.jpg */; };
+		7AEA28C83075E8C90044A87B /* boy-talking.jpg in Resources */ = {isa = PBXBuildFile; fileRef = 7AEA28C73075E8C90044A87B /* boy-talking.jpg */; };
+		7AEA28CA3075E8EB0044A87B /* girl-neutral.jpg in Resources */ = {isa = PBXBuildFile; fileRef = 7AEA28C93075E8EB0044A87B /* girl-neutral.jpg */; };
+		7AEA28CC3075E9040044A87B /* girl-talking.jpg in Resources */ = {isa = PBXBuildFile; fileRef = 7AEA28CB3075E9040044A87B /* girl-talking.jpg */; };
+		A29589B436657A5A85B00726 /* SentenceBuilderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3FA8A4CA82C049AA9ECBB562 /* SentenceBuilderView.swift */; };
+		B22C3D4E5F60718293A4B5C6 /* BaghChalView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A11B2C3D4E5F60718293A4B5 /* BaghChalView.swift */; };
 		BBBBBBBBBBBBBBBBBBBBBBBB /* GharApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 777777777777777777777777 /* GharApp.swift */; };
 		CCCCCCCCCCCCCCCCCCCCCCCC /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 888888888888888888888888 /* ContentView.swift */; };
 		DDDDDDDDDDDDDDDDDDDDDDDD /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 999999999999999999999999 /* Models.swift */; };
+		E7FC071BF55D45F4E77C7F7F /* TextPackView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C77FE75B228FD6BC3C264E20 /* TextPackView.swift */; };
 		EEEEEEEEEEEEEEEEEEEEEEEE /* GharAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAAAAAAAAAAAAAAAAAA /* GharAPI.swift */; };
+		F3F0633BD0F045548DB90528 /* BalloonPopView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33F5CC9FB47F4C04B9D98ADD /* BalloonPopView.swift */; };
+		FAFE4E7489E14581B70E0082 /* LeaderboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 66732179561E40E788B668EF /* LeaderboardView.swift */; };
+		FDE117886E0744F3B34D2B76 /* DogView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000000 /* DogView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		000000000000000000000000 /* DogView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DogView.swift; sourceTree = "<group>"; };
+		111111111111111111111113 /* ParentsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ParentsView.swift; sourceTree = "<group>"; };
 		1A1A1A1A1A1A1A1A1A1A1A1A /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		222222222222222222222224 /* SpeakCheckView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeakCheckView.swift; sourceTree = "<group>"; };
+		33F5CC9FB47F4C04B9D98ADD /* BalloonPopView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BalloonPopView.swift; sourceTree = "<group>"; };
+		3AD624EBAE3638CB9449404D /* SentencesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SentencesView.swift; sourceTree = "<group>"; };
+		3FA8A4CA82C049AA9ECBB562 /* SentenceBuilderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SentenceBuilderView.swift; sourceTree = "<group>"; };
+		444444444444444444444446 /* SongsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SongsView.swift; sourceTree = "<group>"; };
 		666666666666666666666666 /* Ghar.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Ghar.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		66732179561E40E788B668EF /* LeaderboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LeaderboardView.swift; sourceTree = "<group>"; };
+		66DCD3EB1E2247BDAE202A51 /* TraceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TraceView.swift; sourceTree = "<group>"; };
 		777777777777777777777777 /* GharApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GharApp.swift; sourceTree = "<group>"; };
+		7AEA28C53075E8680044A87B /* boy-neutral.jpg */ = {isa = PBXFileReference; lastKnownFileType = image.jpeg; path = "boy-neutral.jpg"; sourceTree = "<group>"; };
+		7AEA28C73075E8C90044A87B /* boy-talking.jpg */ = {isa = PBXFileReference; lastKnownFileType = image.jpeg; path = "boy-talking.jpg"; sourceTree = "<group>"; };
+		7AEA28C93075E8EB0044A87B /* girl-neutral.jpg */ = {isa = PBXFileReference; lastKnownFileType = image.jpeg; path = "girl-neutral.jpg"; sourceTree = "<group>"; };
+		7AEA28CB3075E9040044A87B /* girl-talking.jpg */ = {isa = PBXFileReference; lastKnownFileType = image.jpeg; path = "girl-talking.jpg"; sourceTree = "<group>"; };
 		888888888888888888888888 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		999999999999999999999999 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
+		A11B2C3D4E5F60718293A4B5 /* BaghChalView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BaghChalView.swift; sourceTree = "<group>"; };
 		AAAAAAAAAAAAAAAAAAAAAAAA /* GharAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GharAPI.swift; sourceTree = "<group>"; };
+		C77FE75B228FD6BC3C264E20 /* TextPackView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextPackView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -49,7 +79,22 @@
 				888888888888888888888888 /* ContentView.swift */,
 				999999999999999999999999 /* Models.swift */,
 				AAAAAAAAAAAAAAAAAAAAAAAA /* GharAPI.swift */,
+				000000000000000000000000 /* DogView.swift */,
+				66DCD3EB1E2247BDAE202A51 /* TraceView.swift */,
+				33F5CC9FB47F4C04B9D98ADD /* BalloonPopView.swift */,
+				A11B2C3D4E5F60718293A4B5 /* BaghChalView.swift */,
+				66732179561E40E788B668EF /* LeaderboardView.swift */,
+				3AD624EBAE3638CB9449404D /* SentencesView.swift */,
+				3FA8A4CA82C049AA9ECBB562 /* SentenceBuilderView.swift */,
+				111111111111111111111113 /* ParentsView.swift */,
+				222222222222222222222224 /* SpeakCheckView.swift */,
+				444444444444444444444446 /* SongsView.swift */,
+				C77FE75B228FD6BC3C264E20 /* TextPackView.swift */,
 				1A1A1A1A1A1A1A1A1A1A1A1A /* Assets.xcassets */,
+				7AEA28C93075E8EB0044A87B /* girl-neutral.jpg */,
+				7AEA28C73075E8C90044A87B /* boy-talking.jpg */,
+				7AEA28C53075E8680044A87B /* boy-neutral.jpg */,
+				7AEA28CB3075E9040044A87B /* girl-talking.jpg */,
 			);
 			sourceTree = "<group>";
 		};
@@ -114,7 +159,11 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				7AEA28C63075E8680044A87B /* boy-neutral.jpg in Resources */,
+				7AEA28CA3075E8EB0044A87B /* girl-neutral.jpg in Resources */,
 				2B2B2B2B2B2B2B2B2B2B2B2B /* Assets.xcassets in Resources */,
+				7AEA28CC3075E9040044A87B /* girl-talking.jpg in Resources */,
+				7AEA28C83075E8C90044A87B /* boy-talking.jpg in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -147,6 +196,17 @@
 				CCCCCCCCCCCCCCCCCCCCCCCC /* ContentView.swift in Sources */,
 				DDDDDDDDDDDDDDDDDDDDDDDD /* Models.swift in Sources */,
 				EEEEEEEEEEEEEEEEEEEEEEEE /* GharAPI.swift in Sources */,
+				FDE117886E0744F3B34D2B76 /* DogView.swift in Sources */,
+				37F4EE14E8AE46FDB1902452 /* TraceView.swift in Sources */,
+				F3F0633BD0F045548DB90528 /* BalloonPopView.swift in Sources */,
+				B22C3D4E5F60718293A4B5C6 /* BaghChalView.swift in Sources */,
+				FAFE4E7489E14581B70E0082 /* LeaderboardView.swift in Sources */,
+				44D65358D62BE4DC9271C053 /* SentencesView.swift in Sources */,
+				A29589B436657A5A85B00726 /* SentenceBuilderView.swift in Sources */,
+				111111111111111111111112 /* ParentsView.swift in Sources */,
+				222222222222222222222223 /* SpeakCheckView.swift in Sources */,
+				444444444444444444444445 /* SongsView.swift in Sources */,
+				E7FC071BF55D45F4E77C7F7F /* TextPackView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -267,12 +327,12 @@
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 14;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = Ghar;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.education";
-				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Record your voice for mission proof, so a grown-up can hear it and confirm the mission.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Record your voice for mission proof, and to practice saying Nepali words out loud. Audio never leaves this iPhone.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -298,12 +358,12 @@
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 14;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = Ghar;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.education";
-				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Record your voice for mission proof, so a grown-up can hear it and confirm the mission.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Record your voice for mission proof, and to practice saying Nepali words out loud. Audio never leaves this iPhone.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;

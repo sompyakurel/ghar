@@ -26,6 +26,17 @@ struct Word: Codable, Identifiable {
                                      // in the picture quiz, e.g. "A brass pot
                                      // with mango leaves" — distinguishes
                                      // similar-looking pictures
+    var formality: String? = nil      // "timi" (friends/family) or "tapai" (elders) — Text Pack
+    var story: String? = nil          // festival story: "What is it?" (festivals deck)
+    var when: String? = nil             // festival timing, e.g. "October/November"
+    var customs: [String]? = nil        // festival customs with emoji, e.g. ["🪔 Light diyo lamps"]
+    var funFact: String? = nil         // festival "Did you know?" fact
+    var outline: String? = nil         // trace-the-picture outline PNG, e.g. "/images/nepal-v1/fruits_syau_outline.png"
+    var tracePoints: [[Double]]? = nil // normalized 0-1 outline targets for the trace game
+    var wordTracePoints: [[Double]]? = nil // normalized 0-1 dotted Nepali word targets
+    var traceImage: String? = nil       // worksheet picture shown in the trace game, e.g. "/images/nepal-v1/anim_kukur_simple.jpg"
+    var quizShort: String? = nil         // 2-4 word quiz option, e.g. lyric breakdowns: "Cheap heart"
+                                         // (the english field is a full paragraph — too long for quiz buttons)
 }
 
 // A tappable festival phrase, e.g. Dashain's "Say it this Dashain" strip.
@@ -45,6 +56,7 @@ struct Deck: Codable, Identifiable {
     let kind: String?            // nil = data from before this field existed; treat as "words".
                                 // "festival" decks open the animated FestivalView instead of the word list.
     let minAgeBand: String      // "seedling" | "explorer" | "rooted"
+    let difficulty: String?     // "beginner" | "intermediate" | "hard"; nil = old data, treat as beginner
     let phrases: [FestivalPhrase]?  // optional "say it" strip (Dashain)
     let words: [Word]
 }
@@ -97,6 +109,7 @@ struct Mission: Codable, Identifiable {
     let xp: Int               // 10
     let verifiedXp: Int        // grown-up-confirmed payout (25)
     let hasAudio: Bool         // true once the family records the spoken play instruction
+    let difficulty: String?    // "beginner" | "intermediate" | "hard"; nil = old data, treat as beginner
 
     // Custom decoder: verifiedXp/hasAudio were added after v1, so old
     // packs won't send them. decodeIfPresent keeps those decoding
@@ -114,5 +127,6 @@ struct Mission: Codable, Identifiable {
         xp = try c.decode(Int.self, forKey: .xp)
         verifiedXp = try c.decodeIfPresent(Int.self, forKey: .verifiedXp) ?? 25
         hasAudio = try c.decodeIfPresent(Bool.self, forKey: .hasAudio) ?? false
+        difficulty = try c.decodeIfPresent(String.self, forKey: .difficulty)
     }
 }

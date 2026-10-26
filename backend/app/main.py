@@ -14,11 +14,14 @@ from pathlib import Path
 import json
 
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from .schemas import ContentPack
+from .leaderboard import router as leaderboard_router
 
 app = FastAPI(title="Ghar API", version="0.1.0")
+app.include_router(leaderboard_router)
 
 DATA_DIR = Path(__file__).parent / "data"
 
@@ -62,6 +65,26 @@ def load_pack(pack_id: str) -> ContentPack:
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+# Public web pages: the App Store listing links a live Privacy Policy URL
+# and a Support URL. Plain files in app/static/pages/, no templating.
+PAGES_DIR = Path(__file__).parent / "static" / "pages"
+
+
+@app.get("/privacy")
+def privacy_page():
+    return FileResponse(PAGES_DIR / "privacy-policy.html", media_type="text/html")
+
+
+@app.get("/support")
+def support_page():
+    return FileResponse(PAGES_DIR / "support.html", media_type="text/html")
+
+
+@app.get("/")
+def landing_page():
+    return FileResponse(PAGES_DIR / "landing.html", media_type="text/html")
 
 
 @app.get("/packs")

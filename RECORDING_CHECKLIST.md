@@ -1,6 +1,6 @@
 # Recording checklist — Ghar Nepal pack
 
-**35 clips to go**, 143 words + 13 phrases/cheers already done ✅.
+**35 clips to go**, 143 words + 13 phrases/cheers already done ✅. (+2 try-again feedback clips below)
 
 ## How to record
 
@@ -68,6 +68,12 @@
 - [ ] खाएँ! मिठो थियो। (khae! mitho thiyo.) — `convo_hajur_np.m4a`
 - [ ] चिया पिउनुहुन्छ? (chiya piunuhuncha?) — `convo_maaph_np.m4a`
 - [ ] हुन्छ, धन्यवाद! (huncha, dhanyabad!) — `convo_hoina_np.m4a`
+
+## To record — Practice "try again" feedback (2)
+Played when the kid picks the wrong reply in "Practice a conversation" — warm and encouraging, not scolding. The app picks one at random.
+
+- [ ] फेरि प्रयास गर (pheri prayas gara — try again) — `feedback_try_again_1_np.m4a`
+- [ ] होइन फेरि हेर्नुस् (hoina pheri hernus — not that one, look again) — `feedback_try_again_2_np.m4a`
 
 ## To record — My Ghar decorations (23)
 Tap a decoration in My Ghar to hear its name — these are what plays. Say just the Nepali name, once each.

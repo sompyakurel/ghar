@@ -1,0 +1,113 @@
+{
+  "id": "rhymes-v1",
+  "version": "1.0.0",
+  "songs": [
+    {
+      "id": "rhyme-1",
+      "title_ne": "खै बिरालो?",
+      "title_en": "Where's the Cat? (traditional chain rhyme)",
+      "lyrics_ne": [
+        "खै मेरो बासी भात?",
+        "बिरालोले खायो।",
+        "खै बिरालो?",
+        "मुसा मार्न गयो।",
+        "खै मुसा?",
+        "दुलोभित्र पस्यो।",
+        "खै दुलो?",
+        "गाईले किच्यो।",
+        "खै गाई?",
+        "खोलाले बगायो।",
+        "खै खोलो?",
+        "सुक्यो!"
+      ],
+      "audio": "khai_biralo_np.m4a",
+      "image": "/images/nepal-v1/rhyme_khaibiralo.jpg",
+      "has_audio": true,
+      "lyrics_en": [
+        "Where's my stale rice?",
+        "The cat ate it.",
+        "Where's the cat?",
+        "Went to kill the mouse.",
+        "Where's the mouse?",
+        "Went into the hole.",
+        "Where's the hole?",
+        "The cow trampled it.",
+        "Where's the cow?",
+        "The river swept it away.",
+        "Where's the river?",
+        "It dried up!"
+      ],
+      "difficulty": "beginner"
+    },
+    {
+      "id": "rhyme-2",
+      "title_ne": "इन्टु मिन्टु लन्डनमा",
+      "title_en": "Intu Mintu London Ma (traditional playground chant)",
+      "lyrics_ne": [
+        "इन्टु मिन्टु लन्डनमा,",
+        "हाम्रो बाबा पल्टनमा,",
+        "स्कुलको पाले दाइ,",
+        "पहिलो घण्टी बजाइदेऊ,",
+        "तिन्निन्निन्निन्नि...",
+        "झ्याप्प!"
+      ],
+      "audio": "intu_mintu_np.m4a",
+      "image": "/images/nepal-v1/rhyme_intumintu.jpg",
+      "has_audio": true,
+      "lyrics_en": [
+        "Intu Mintu in London,",
+        "Our dad's in the army,",
+        "School's gatekeeper brother,",
+        "Ring the first bell,",
+        "Trinnninnninnn...",
+        "Snap!"
+      ],
+      "difficulty": "beginner"
+    },
+    {
+      "id": "rhyme-3",
+      "title_ne": "सियो खोइ सियो",
+      "title_en": "Siyo Khoi Siyo (Where's the Needle!)",
+      "lyrics_ne": [
+        "सियो खोइ सियो!",
+        "ऐले यहीँ थियो",
+        "ऐले पऱ्यो कहाँ-कहाँ",
+        "खोज तीखा आँखा!",
+        "सानुसानु सियो",
+        "काम ठूलो थियो",
+        "कता परिदियो",
+        "सियो खोइ सियो!",
+        "हराएको सियो",
+        "लुकी गच्छ चियो",
+        "हेर-हेर, आँखा",
+        "हेरेको हो कहाँ-कहाँ!",
+        "ऐले भन्न थाल्यौ",
+        "आँखा यता नजा",
+        "लुक्नु कति मजा!",
+        "पैले त्यसे फाल्यौ"
+      ],
+      "audio": "siyo_khoi_siyo_np.m4a",
+      "image": "/images/nepal-v1/rhyme_siyokhoisiyo.jpg",
+      "has_audio": true,
+      "lyrics_en": [
+        "Where is the needle!",
+        "It was right here just now",
+        "Where has it fallen now?",
+        "Search with sharp eyes!",
+        "Tiny, tiny needle",
+        "The work it did was big",
+        "Where did it get dropped?",
+        "Where is the needle!",
+        "The lost needle",
+        "It went hiding somewhere",
+        "Look, look — eyes",
+        "Where all did you look!",
+        "Now you've started saying",
+        "Don't let your eyes wander here",
+        "Hiding is so much fun!",
+        "You threw it there first"
+      ],
+      "difficulty": "beginner"
+    }
+  ]
+}

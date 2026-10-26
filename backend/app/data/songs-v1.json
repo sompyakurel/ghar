@@ -1,0 +1,88 @@
+{
+  "id": "songs-v1",
+  "version": "1.0.0",
+  "songs": [
+    {
+      "id": "song-1",
+      "title_ne": "दशैं आयो",
+      "title_en": "Dashain Aayo (traditional rhyme)",
+      "lyrics_ne": [
+        "दशैं आयो, खाउँला पिउँला,",
+        "कहाँबाट ल्याउँला, रमाइलो गरौंला।",
+        "दशैं आयो, खुसी छायो,",
+        "आऊ साथी, हामी सँगै रमाऔंला।",
+        "दशैं आयो, चङ्गा उड्यो,",
+        "आकाशमा हेरी, सँगै रमाऔंला।",
+        "दशैं आयो, नाना किनौंला,",
+        "नयाँ नाना लगाएर, पिङ खेलौंला।",
+        "दशैं आयो, मामाघर जाऔंला,",
+        "टीका लगाई, हामी आशिष लिऔंला।",
+        "दशैं आयो, खाउँला पिउँला,",
+        "कहाँबाट ल्याउँला, रमाइलो गरौंला।",
+        "धत्ता पापी, म त छुट्टै बसौंला।"
+      ],
+      "audio": "dashain_aayo_np.m4a",
+      "has_audio": true,
+      "lyrics_en": [
+        "Dashain aayo, khaula piula,",
+        "Kaha bata lyaula, ramailo garaula.",
+        "Dashain aayo, khusi chhayo,",
+        "Aau sathi, hami sangai ramaula.",
+        "Dashain aayo, changa udyo,",
+        "Aakash ma heri, sangai ramaula.",
+        "Dashain aayo, nana kinaula,",
+        "Naya nana lagayera, ping khelaula.",
+        "Dashain aayo, mama ghar jaula,",
+        "Tika lagai, hami ashish liula.",
+        "Dashain aayo, khaula piula,",
+        "Kaha bata lyaula, ramailo garaula.",
+        "Dhatta papi, ma ta chhuttai basaula."
+      ],
+      "difficulty": "hard"
+    },
+    {
+      "id": "song-2",
+      "title_ne": "देउसी रे",
+      "title_en": "Deusi Re (traditional Tihar folk verse)",
+      "lyrics_ne": [
+        "ए बत्तीको झिलिमिली, देउसी रे",
+        "ए फूलको झिलिमिली, देउसी रे",
+        "ए हामी त्यसै आएको हैन, बलि राजाको हुकुमले, देउसी रे",
+        "ए आजको दिन, तिहार हो, देउसी रे"
+      ],
+      "audio": "deusi_re_np.m4a",
+      "has_audio": true,
+      "lyrics_en": [
+        "E battiko jhilimili, deusi re",
+        "E phoolko jhilimili, deusi re",
+        "E hami tyasai aayeko haina, bali raja ko hukum le, deusi re",
+        "E aajako din, tihar ho, deusi re"
+      ],
+      "difficulty": "hard"
+    },
+    {
+      "id": "song-3",
+      "title_ne": "घामपानी",
+      "title_en": "Ghampani (traditional children's rhyme)",
+      "lyrics_ne": [
+        "घामपानी घामपानी इन्द्रेनीको झिलिमिली",
+        "आऊ साथी खेल खेलौँ सबै मिलिजुली।",
+        "एकातिर पानी पर्यो, अर्कोतिर, घाम।",
+        "सबैलाई माया गर भन्नु हुन्छ आमा।",
+        "इन्द्रेनी मिलेका छन् हेर सातै रङ",
+        "पढौँ लेखौँ खेल खेलौँ मिलौँ सबैसँग।"
+      ],
+      "audio": "ghampani_np.m4a",
+      "has_audio": true,
+      "lyrics_en": [
+        "Ghampani ghampani indreniko jhilimili.",
+        "Aau sathi khel khelaun sabai milijuli.",
+        "Ekatira pani paryo, arkotira, gham.",
+        "Sabailai maya gara bhannu hunchha aama.",
+        "Indreni mileka chhan hera satai rang.",
+        "Padhaun lekhaun khel khelaun milaun sabaisanga."
+      ],
+      "difficulty": "hard"
+    }
+  ]
+}
