@@ -19,9 +19,11 @@ from fastapi.staticfiles import StaticFiles
 
 from .schemas import ContentPack
 from .leaderboard import router as leaderboard_router
+from .calendar import router as calendar_router
 
 app = FastAPI(title="Ghar API", version="0.1.0")
 app.include_router(leaderboard_router)
+app.include_router(calendar_router)
 
 DATA_DIR = Path(__file__).parent / "data"
 
